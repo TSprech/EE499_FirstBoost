@@ -1,0 +1,8 @@
+cmake-build-debug/*
+cmake-build-minsizerel/*
+cmake-build-release/*
+cmake-build-relwithdebinfo/*
+.idea/workspace.xml
+.idea/usage.statistics.xml
+.idea/shelf/*
+.idea/.name
