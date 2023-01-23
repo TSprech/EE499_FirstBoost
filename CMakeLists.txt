@@ -1,31 +1,18 @@
 cmake_minimum_required(VERSION 3.24)
 include(ARMGCCToolchain.cmake)
-#include_directories(pico-sdk)
-
-# Pull in SDK (must be before project)
-#include(pico_sdk_import.cmake)
 
 include(pico-sdk/pico_sdk_init.cmake)
 
-project(blink C CXX ASM)
-set(CMAKE_C_STANDARD 11)
-set(CMAKE_CXX_STANDARD 17)
+project(FirstBoost C CXX ASM)
+set(CMAKE_C_STANDARD 23)
+set(CMAKE_CXX_STANDARD 23)
 
 if (PICO_SDK_VERSION_STRING VERSION_LESS "1.3.0")
     message(FATAL_ERROR "Raspberry Pi Pico SDK version 1.3.0 (or later) required. Your version is ${PICO_SDK_VERSION_STRING}")
-endif()
-
-set(PICO_EXAMPLES_PATH ${PROJECT_SOURCE_DIR})
+endif ()
 
 # Initialize the SDK
 pico_sdk_init()
-
-#include(example_auto_set_url.cmake)
-## Add blink example
-#add_subdirectory(blink)
-#
-## Add hello world example
-#add_subdirectory(hello_world)
 
 add_compile_options(-Wall
         -Wno-format          # int != int32_t as far as the compiler is concerned because gcc has int32_t as long int
@@ -33,42 +20,15 @@ add_compile_options(-Wall
         -Wno-maybe-uninitialized
         )
 
-## Hardware-specific examples in subdirectories:
-#add_subdirectory(adc)
-#add_subdirectory(clocks)
-#add_subdirectory(cmake)
-#add_subdirectory(divider)
-#add_subdirectory(dma)
-#add_subdirectory(flash)
-#add_subdirectory(gpio)
-#add_subdirectory(i2c)
-#add_subdirectory(interp)
-#add_subdirectory(multicore)
-#add_subdirectory(picoboard)
-#add_subdirectory(pico_w)
-#add_subdirectory(pio)
-#add_subdirectory(pwm)
-#add_subdirectory(reset)
-#add_subdirectory(rtc)
-#add_subdirectory(spi)
-#add_subdirectory(system)
-#add_subdirectory(timer)
-#add_subdirectory(uart)
-#add_subdirectory(usb)
-#add_subdirectory(watchdog)
-
-add_executable(blink
+add_executable(FirstBoost
         Src/Blink.cpp
         )
 
 # pull in common dependencies
-target_link_libraries(blink pico_stdlib)
+target_link_libraries(FirstBoost pico_stdlib)
 
 # create map/bin/hex file etc.
-pico_add_extra_outputs(blink)
+pico_add_extra_outputs(FirstBoost)
 
 ## add url via pico_set_program_url
-#example_auto_set_url(blink)
-
-# initialize the Raspberry Pi Pico SDK
-#pico_sdk_init()
+#example_auto_set_url(FirstBoost)
