@@ -6,3 +6,4 @@ cmake-build-relwithdebinfo/*
 .idea/usage.statistics.xml
 .idea/shelf/*
 .idea/.name
+.idea/vcs.xml
