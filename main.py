@@ -210,7 +210,23 @@ logging.basicConfig(
 log = logging.getLogger("rich")
 
 
-async def json_from_embedded(send_channel: trio.MemorySendChannel):
+# class SerialJSON:
+#     def __init__(self):
+#         self.com
+#
+#     def open(self):
+#         self.open()
+#
+#     # def update(self):
+#
+#     # def rx_json(self):
+#
+#
+# sjson = SerialJSON(port="COM5")
+# # sjson.open()
+
+
+async def rx_json(send_channel: trio.MemorySendChannel):
     while True:
         if app.connected and app.link.in_waiting > 0:
             data = app.link.readline().decode("utf-8")
@@ -219,16 +235,31 @@ async def json_from_embedded(send_channel: trio.MemorySendChannel):
                 await send_channel.send(json_object)
             except json.JSONDecodeError as e:
                 log.error(f"JSON Decode error: {e}")
+        await trio.sleep(1/60)
+
+
+async def tx_json(rec_channel: trio.MemoryReceiveChannel):
+    while True:
+        if app.connected:
+            async for json_data in rec_channel:
+                app.link.write((json.dumps(json_data) + '\r').encode("ascii"))
+        await trio.sleep(1/60)
+
+
+async def generate_transmit_json(send_channel: trio.MemorySendChannel):
+    state = True
+    while True:
+        # await rec_channel.receive()
+        # async for json_data in rec_channel:
+        doc = {"LED": state}
+        state = not state
+        await send_channel.send(doc)
+        # doc["SMPS"]["Duty"] = app.get_duty()
+        # doc["SMPS"]["DeadBand"] = app.get_dead_band()
+        # doc["SMPS"]["Frequency"] = app.get_frequency()
+        # doc_str = json.dumps(doc)
         await trio.sleep(1)
 
-
-# async def generate_transmit_json(send_channel: trio.MemorySendChannel):
-#     while True:
-#         doc = {}
-#         doc["SMPS"]["Duty"] = app.get_duty()
-#         doc["SMPS"]["DeadBand"] = app.get_dead_band()
-#         doc["SMPS"]["Frequency"] = app.get_frequency()
-#         doc_str = json.dumps(doc)
 
 async def updated_from_json(rec_channel: trio.MemoryReceiveChannel):
     while True:
@@ -286,13 +317,15 @@ async def main():
     async with trio.open_nursery() as nursery:
         send_channel, receive_channel = trio.open_memory_channel(0)
         json_send_channel, json_receive_channel = trio.open_memory_channel(0)
+        json_tx_send_channel, json_tx_receive_channel = trio.open_memory_channel(0)
         nursery.start_soon(update_com_ports, receive_channel)
         nursery.start_soon(get_com_ports, send_channel)
         nursery.start_soon(tkloop)
-        nursery.start_soon(json_from_embedded, json_send_channel)
+        nursery.start_soon(rx_json, json_send_channel)
+        nursery.start_soon(generate_transmit_json, json_tx_send_channel)
+        nursery.start_soon(tx_json, json_tx_receive_channel)
         nursery.start_soon(updated_from_json, json_receive_channel)
         # Duty cycle adjustment, dead band adjustment, VIO/IIO, Protection Control, LED heartbeat, ESTOP (set duty cycle to limits)
-
 
 
 if __name__ == "__main__":
