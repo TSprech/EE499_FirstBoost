@@ -36,8 +36,6 @@ if (TARGET tinyusb_device)
     # create map/bin/hex file etc.
     pico_add_extra_outputs(FirstBoost)
 
-    add_subdirectory(Inc/SerialTransferCpp)
-    target_link_libraries(FirstBoost SerialTransferCpp)
     target_include_directories(FirstBoost PUBLIC Inc)
     add_compile_definitions(JSON_NO_IO=1)
     add_link_options(--print-memory-usage)
