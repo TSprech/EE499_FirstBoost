@@ -14,6 +14,100 @@ ctk.set_appearance_mode("System")  # Modes: "System" (standard), "Dark", "Light"
 ctk.set_default_color_theme("blue")  # Themes: "blue" (standard), "green", "dark-blue"
 
 
+class SerialJSON(serial.Serial):
+    """
+    Trio compatible wrapper for dealing with a serial port. Handles all port I/O operations and interfaces with other programs using two memory channels.
+    """
+    def __init__(self, eol_delimiter: str = '\r', channel_buffer_size=0, **kwargs):
+        """
+        :param eol_delimiter: The character (or string) that signifies the end of the JSON string being received.
+        :param channel_buffer_size: Number of element that can sit in the channel communication buffers, 0 means no buffering (typical).
+        :param kwargs: Same as the arguments that can be passed to a pyserial.SerialBase object.
+        """
+        super().__init__(**kwargs)
+        self.connected = False
+        self.eol_delimiter = eol_delimiter
+        self._rx_send_channel, self.rx_receive_channel = trio.open_memory_channel(channel_buffer_size)
+        self.tx_send_channel, self._tx_receive_channel = trio.open_memory_channel(channel_buffer_size)
+
+    def connect(self, com_port=None):
+        if com_port is not None:
+            self.setPort(com_port)  # Make sure that were actually trying to connect to a port
+            self.open()  # Handles the actual acquisition of the serial port
+            # Clear out any existing data
+            self.reset_input_buffer()
+            self.reset_output_buffer()
+            self.connected = True
+
+    def disconnect(self):
+        if self.connected:
+            self.close()  # Handles releasing the port back to the system to make it available again
+            self.connected = False
+
+    @property
+    def get_tx_channel(self) -> trio.MemorySendChannel:
+        """
+        :returns: The channel which a program should use to send data to the serial device
+        """
+        return self.tx_send_channel
+
+    @property
+    def get_rx_channel(self) -> trio.MemoryReceiveChannel:
+        """
+        :returns: The channel which a program should use to receive data from the serial device
+        """
+        return self.rx_receive_channel
+
+    def update_functions(self, callback_time_s: float):
+        """
+        Gets a list of all async functions, should be added to the nursery.
+
+        .. code-block:: Python
+
+            async with trio.open_nursery() as nursery:
+                for func in sjson.update_functions(0.5):
+                    nursery.start_soon(func)
+
+        :param callback_time_s: The sleep time for each coroutine, lower = lower serial port latency.
+        :returns: A list of all async function handlers which handle the serial port.
+        """
+
+        async def rx_callback():
+            while True:
+                await self.rx_json()
+                await trio.sleep(callback_time_s)
+
+        async def tx_callback():
+            while True:
+                await self.tx_json()
+                await trio.sleep(callback_time_s)
+
+        return [rx_callback, tx_callback]
+
+    async def tx_json(self):
+        try:
+            if self.connected:  # Don't try to send data if there is no device connected
+                async for data in self._tx_receive_channel:  # Go through any (maybe no) data that has been queued to be sent out to the serial device
+                    self.write((json.dumps(data) + self.eol_delimiter).encode("ascii"))  # For each, make sure it is encoded correctly
+        except serial.PortNotOpenError:
+            log.debug("Port no longer open, abandoning send")
+
+    async def rx_json(self):
+        try:
+            if self.connected and self.in_waiting > 0:  # Don't try to read data if there is no device connected, or if nothing has arrived from the device
+                data = self.readline().decode("utf-8")  # Since there is data, read the full line as the JSON is sent as a single continuous line
+                try:
+                    json_object = json.loads(data)  # Convert from string to dictionary
+                    await self._rx_send_channel.send(json_object)  # Take the dictionary and send it out the rx memory channel to be consumed by application
+                except json.JSONDecodeError as e:  # If any parsing error happens, report it (can happen if connecting to the device in the middle of a transmission)
+                    log.error(f"JSON Decode error: {e}")
+        except serial.SerialException:
+            log.debug("Port no longer open, abandoning receive")
+
+
+sjson = SerialJSON()
+
+
 class ValueWithUnits(ctk.CTkFrame):
     def __init__(self, root, label, value, units, label_unit_width, value_width, font):
         super().__init__(root)
@@ -215,17 +309,13 @@ class App(ctk.CTk):
     def sidebar_button_event(self):
         option = self.serial_port_optionmenu.get()
         if not option == 'Port':
-            # if not self.connected:
-            port_name = option.split(' ')[0]
-            # self.link = serial.Serial(port="COM13")
-            self.link = serial.Serial(port=port_name)
-            self.link.reset_input_buffer()
-            self.connected = True
-            # self.serial_port_connect_button.configure(text='Disconnect')
-            # else:
-            #     self.link.close()
-            #     self.connected = False
-            #     self.serial_port_connect_button.configure(text='Connect')
+            if not sjson.connected:
+                port_name = option.split(' ')[0]
+                sjson.connect(com_port=port_name)
+                self.serial_port_connect_button.configure(text='Disconnect')
+            else:
+                sjson.disconnect()
+                self.serial_port_connect_button.configure(text='Connect')
 
 
 app = App()
@@ -236,76 +326,6 @@ logging.basicConfig(
 )
 
 log = logging.getLogger("rich")
-
-
-class SerialJSON(serial.Serial):
-    def __init__(self, rx_channel: trio.MemorySendChannel, tx_channel: trio.MemoryReceiveChannel, **kwargs):
-        super().__init__(**kwargs)
-        self.connected = False
-        self.rx_channel = rx_channel
-        self.tx_channel = tx_channel
-
-    def connect(self, com_port=None):
-        if com_port is not None:
-            self.setPort(com_port)
-            self.open()
-            self.reset_input_buffer()
-            self.reset_output_buffer()
-            self.connected = True
-
-    def update_functions(self, callback_time_s: float):
-        async def rx_callback():
-            while True:
-                await self.rx_json()
-                await trio.sleep(callback_time_s)
-
-        async def tx_callback():
-            while True:
-                await self.tx_json()
-                await trio.sleep(callback_time_s)
-        return [rx_callback, tx_callback]
-
-    async def tx_json(self):
-        if self.connected:
-            async for data in self.tx_channel:
-                self.write((json.dumps(data) + '\r').encode("ascii"))
-
-    async def rx_json(self):
-        if self.connected and self.in_waiting > 0:
-            data = self.readline().decode("utf-8")
-            try:
-                json_object = json.loads(data)
-                await self.rx_channel.send(json_object)
-            except json.JSONDecodeError as e:
-                log.error(f"JSON Decode error: {e}")
-
-
-json_send_channel, json_receive_channel = trio.open_memory_channel(0)
-json_tx_send_channel, json_tx_receive_channel = trio.open_memory_channel(0)
-
-sjson = SerialJSON(json_send_channel, json_tx_receive_channel)
-
-sjson.connect("COM5")
-
-
-# async def rx_json(send_channel: trio.MemorySendChannel):
-#     while True:
-#         if app.connected and app.link.in_waiting > 0:
-#             data = app.link.readline().decode("utf-8")
-#             try:
-#                 json_object = json.loads(data)
-#                 await send_channel.send(json_object)
-#             except json.JSONDecodeError as e:
-#                 log.error(f"JSON Decode error: {e}")
-#         await trio.sleep(1 / 60)
-
-
-# async def tx_json(rec_channel: trio.MemoryReceiveChannel):
-#     while True:
-#         if app.connected:
-#             async for json_data in rec_channel:
-#                 app.link.write((json.dumps(json_data) + '\r').encode("ascii"))
-#         await trio.sleep(1 / 60)
 
 
 async def generate_transmit_json(send_channel: trio.MemorySendChannel):
@@ -347,7 +367,7 @@ async def updated_from_json(rec_channel: trio.MemoryReceiveChannel):
             #
             # app.set_m(float(app.get_v_out()) / float(app.get_v_in()))
             # app.set_e(float(app.get_p_out()) / float(app.get_p_in()) * 100)
-            await trio.sleep(1/30)
+            await trio.sleep(1 / 30)
 
 
 async def get_com_ports(send_channel: trio.MemorySendChannel):
@@ -401,10 +421,8 @@ async def main():
         nursery.start_soon(tkloop)
         for func in sjson.update_functions(0.5):
             nursery.start_soon(func)
-        # nursery.start_soon(rx_json, json_send_channel)
-        nursery.start_soon(generate_transmit_json, json_tx_send_channel)
-        # nursery.start_soon(tx_json, json_tx_receive_channel)
-        nursery.start_soon(updated_from_json, json_receive_channel)
+        nursery.start_soon(generate_transmit_json, sjson.get_tx_channel)
+        nursery.start_soon(updated_from_json, sjson.get_rx_channel)
         # Duty cycle adjustment, dead band adjustment, VIO/IIO, Protection Control, LED heartbeat, ESTOP (set duty cycle to limits)
 
 
