@@ -1,0 +1,11 @@
+{
+  "SMPS": {
+    "EStop": false,
+    "Duty": 0,
+    "DeadBand": 0,
+    "Protection": false
+  },
+  "Control": {
+    "LED": false
+  }
+}
