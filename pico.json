@@ -6,6 +6,26 @@
     "FrequencyKHz": 100,
     "Protection": false
   },
+  "Sensor": {
+    "Tune": {
+      "Vin": {
+        "Offset": 1.65,
+        "Multiplier": 5.8
+      },
+      "Vout": {
+        "Offset": 1.65,
+        "Multiplier": 5.8
+      },
+      "Iin": {
+        "Offset": 1.65,
+        "Gain": 5.8
+      },
+      "Iout": {
+        "Offset": 1.65,
+        "Gain": 5.8
+      }
+    }
+  },
   "Control": {
     "LED": false
   }

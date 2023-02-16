@@ -1,5 +1,6 @@
 #include <cstdint>
 #include <cstdio>
+#include <numeric>
 
 #include "pico/stdlib.h"
 #include "hardware/pwm.h"
@@ -11,6 +12,7 @@
 #include "GetLine.hpp"
 
 constexpr auto LED_PIN = PICO_DEFAULT_LED_PIN;
+//constexpr auto LED_PIN = 13;
 
 using namespace nlohmann;
 
@@ -32,6 +34,18 @@ uint16_t pwm_a = 0;
 uint16_t pwm_b = 0;
 uint16_t deadband = 0;
 float duty = 0;
+
+float v_in_offset = 0;
+float v_in_multiplier = 1.0F;
+
+float v_out_offset = 0;
+float v_out_multiplier = 1.0F;
+
+float i_in_offset = 1.65F;
+float i_in_gain = 1.0F;
+
+float i_out_offset = 1.65F;
+float i_out_gain = 1.0F;
 
 struct PWMManager {
   explicit PWMManager(uint8_t slice_number) : slice_number_(slice_number) {}
@@ -145,6 +159,17 @@ auto ADCVoltage(ADC_Channels channel) -> float {
   return static_cast<float>(adc_value) * conversion_factor;
 }
 
+constexpr auto RawToVoltage(uint16_t adc_raw) -> float {
+  constexpr float conversion_factor = 3.3f / (1 << 12); // 12-bit conversion, assume max value == ADC_VREF == 3.3 V
+  return static_cast<float>(adc_raw) * conversion_factor;
+}
+
+
+auto ADCRaw(ADC_Channels channel) -> uint16_t {
+  adc_select_input(static_cast<uint>(channel));
+  return adc_read();
+}
+
 auto ADCCurrent(ADC_Channels channel, uint16_t shunt_mohm, float offset, float gain) -> float {
   auto raw = ADCVoltage(channel);
   auto shunt_voltage = (raw-offset) * gain;
@@ -159,9 +184,18 @@ float ADCTemperatureC() {
   return 27.0F - (adc - 0.706F) / 0.001721F;
 }
 
+constexpr size_t averaging_array_size = 300;
+std::array<uint16_t, averaging_array_size> v_in_readings{};
+std::array<uint16_t, averaging_array_size> v_out_readings{};
+std::array<uint16_t, averaging_array_size> i_in_readings{};
+std::array<uint16_t, averaging_array_size> i_out_readings{};
+
 PWMManager pwm_manager(pwm_gpio_to_slice_num(0));
 
 int main() {
+  gpio_init(LED_PIN);
+  gpio_set_dir(LED_PIN, GPIO_OUT);
+  gpio_put(LED_PIN, true);
   stdio_init_all();
 
   adc_init();
@@ -173,31 +207,6 @@ int main() {
 
   pwm_manager.Initialize();
 
-//  // Tell GPIO 0 and 1 they are allocated to the PWM
-//  gpio_set_function(0, GPIO_FUNC_PWM);
-//  gpio_set_function(1, GPIO_FUNC_PWM);
-//
-//  gpio_disable_pulls(0);
-//  gpio_disable_pulls(1);
-//
-//  gpio_set_slew_rate(0, GPIO_SLEW_RATE_FAST);
-//  gpio_set_slew_rate(1, GPIO_SLEW_RATE_FAST);
-//
-//  gpio_set_drive_strength(0, GPIO_DRIVE_STRENGTH_12MA);
-//  gpio_set_drive_strength(1, GPIO_DRIVE_STRENGTH_12MA);
-//
-//  // Find out which PWM slice is connected to GPIO 0 (it's slice 0)
-//  auto slice = pwm_gpio_to_slice_num(0);
-//
-//  pwm_set_wrap(slice, 625 - 1);
-////  pwm_set_both_levels(slice, 5000, 1250);
-//  pwm_set_both_levels(slice, 295, 335);
-//  pwm_set_phase_correct(slice, true);
-//  pwm_set_output_polarity(slice, false, false);
-//  pwm_set_enabled(slice, true); // Start PWM running
-
-  gpio_init(LED_PIN);
-  gpio_set_dir(LED_PIN, GPIO_OUT);
   std::array<char, 256> buf{};
 
   json j;
@@ -207,30 +216,60 @@ int main() {
     if (!in_str.empty()) {
       j = json::parse(in_str);
       if (j.contains("SMPS")) {
-//        CheckKeyThenCall(j["SMPS"], "Duty", [&](auto duty){pwm_manager.SMPSDuty(duty);});
         if (j["SMPS"].contains("Duty")) pwm_manager.SMPSDuty(j["SMPS"]["Duty"]);
-//        CheckKeyThenCall(j["SMPS"], "DeadBand", [&](auto dead_band){pwm_manager.DeadBand(dead_band);});
         if (j["SMPS"].contains("DeadBand")) pwm_manager.DeadBand(j["SMPS"]["DeadBand"]);
-//        CheckKeyThenCall(j["SMPS"], "Frequency", [&](auto frequency_khz){pwm_manager.SMPSFrequencyKHz(frequency_khz);});
         if (j["SMPS"].contains("Frequency")) pwm_manager.SMPSFrequencyKHz(j["SMPS"]["Frequency"]);
       }
+//      if (j.contains("Sensor")) {
+//        if (j["Sensor"].contains("Vin")) {
+//          if (j["Sensor"]["Vin"].contains("Offset")) v_in_offset = j["Sensor"]["Vin"]["Offset"];
+//          if (j["Sensor"]["Vin"].contains("Multiplier")) v_in_multiplier = j["Sensor"]["Vin"]["Multiplier"];
+//        }
+//
+//        if (j["Sensor"].contains("Vout")) {
+//          if (j["Sensor"]["Vout"].contains("Offset")) v_out_offset = j["Sensor"]["Vout"]["Offset"];
+//          if (j["Sensor"]["Vout"].contains("Multiplier")) v_out_multiplier = j["Sensor"]["Vout"]["Multiplier"];
+//        }
+//
+//        if (j["Sensor"].contains("Iin")) {
+//          if (j["Sensor"]["Iin"].contains("Offset")) i_in_offset = j["Sensor"]["Iin"]["Offset"];
+//          if (j["Sensor"]["Iin"].contains("Gain")) i_in_gain = j["Sensor"]["Iin"]["Gain"];
+//        }
+//
+//        if (j["Sensor"].contains("Iout")) {
+//          if (j["Sensor"]["Iout"].contains("Offset")) i_out_offset = j["Sensor"]["Iout"]["Offset"];
+//          if (j["Sensor"]["Iout"].contains("Gain")) i_out_gain = j["Sensor"]["Iout"]["Gain"];
+//        }
+//      }
       if (j.contains("Control")) {
         CheckKeyThenCall(j["Control"], "LED", BuiltInLED);
       }
     }
     j.clear();
 
-    j["SMPS"]["In"]["Volts"] = ADCVoltage(ADC_Channels::voltage_in);
-    j["SMPS"]["Out"]["Volts"] = ADCVoltage(ADC_Channels::voltage_out);
-    j["SMPS"]["In"]["Amps"] = ADCCurrent(ADC_Channels::current_in, 100, 1.665, 1);
-    j["SMPS"]["Out"]["Amps"] = ADCCurrent(ADC_Channels::current_out, 100, 1.665, 1);
+//    j["SMPS"]["In"]["Volts"] = ADCVoltage(ADC_Channels::voltage_in);
+//    j["SMPS"]["Out"]["Volts"] = ADCVoltage(ADC_Channels::voltage_out);
+//    j["SMPS"]["In"]["Amps"] = ADCCurrent(ADC_Channels::current_in, 100, i_in_offset, i_in_gain);
+//    j["SMPS"]["Out"]["Amps"] = ADCCurrent(ADC_Channels::current_out, 100, i_out_offset, i_out_gain);
+
+    for (size_t index = 0; index < averaging_array_size; ++index) {
+      v_in_readings[index] = ADCRaw(ADC_Channels::voltage_in);
+      v_out_readings[index] = ADCRaw(ADC_Channels::voltage_out);
+      i_in_readings[index] = ADCRaw(ADC_Channels::current_in);
+      i_out_readings[index] = ADCRaw(ADC_Channels::current_out);
+    }
+
+    auto v_in_average = RawToVoltage(std::accumulate(v_in_readings.begin(), v_in_readings.end(), 0) / averaging_array_size);
+    auto v_out_average = RawToVoltage(std::accumulate(v_out_readings.begin(), v_out_readings.end(), 0) / averaging_array_size);
+    auto i_in_average = RawToVoltage(std::accumulate(i_in_readings.begin(), i_in_readings.end(), 0) / averaging_array_size);
+    auto i_out_average = RawToVoltage(std::accumulate(i_out_readings.begin(), i_out_readings.end(), 0) / averaging_array_size);
+
+    j["SMPS"]["In"]["VVolts"] = v_in_average;
+    j["SMPS"]["In"]["IVolts"] = v_out_average;
+    j["SMPS"]["Out"]["VVolts"] = i_in_average;
+    j["SMPS"]["Out"]["IVolts"] = i_out_average;
+
     j["System"]["Temp"] = ADCTemperatureC();
-    j["SMPS"]["FrequencyKHz"] = pwm_manager.SMPSFrequencyKHz();
-    j["SMPS"]["ALevel"] = pwm_a;
-    j["SMPS"]["BLevel"] = pwm_b;
-    j["SMPS"]["InDuty"] = duty;
-    j["SMPS"]["InDeadBand"] = deadband;
-    j["SMPS"]["Top"] = pwm_manager.Top();
     std::string json_str = j.dump();
     puts(json_str.data());
     j.clear();
