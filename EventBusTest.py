@@ -14,7 +14,7 @@ import SerialJSON
 import Headers as hfonts
 
 ctk.set_appearance_mode("System")  # Modes: "System" (standard), "Dark", "Light"
-ctk.set_default_color_theme("dark-blue")  # Themes: "blue" (standard), "green", "dark-blue"
+ctk.set_default_color_theme("blue")  # Themes: "blue" (standard), "green", "dark-blue"
 
 sjson = SerialJSON.SerialJSON()
 
@@ -117,6 +117,57 @@ class TuneTab:
         self.v_in_offset_frame = EntryWithButtons(root, num_type=float, emit_message=emit, font=hfonts.header_1_font, default=default)
         self.v_in_offset_frame.grid(row=row, column=1, sticky="ne")
 
+# class MessageBox(ctk.CTkFrame):
+#     def __init__(self, root):
+#         super().__init__(root, fg_color="transparent")
+#         self.label = ctk.CTkLabel(self, text="Messages", font=hfonts.header_0_font).grid(row=0, column=0, columnspan=1, pady=(0,5), sticky="nwe")
+#
+#         message_frame = ctk.CTkFrame(self)
+#         message_frame.grid(row=1, column=0, pady=(0,5), sticky='nw')
+#         self.message_box = ctk.CTkTextbox(message_frame, font=hfonts.regular_font)
+#         self.message_box.grid(row=0, column=0, columnspan=1, sticky="we")
+
+
+class SystemDetails(ctk.CTkFrame):
+    def __init__(self, root):
+        super().__init__(root, fg_color="transparent")
+        self.label = ctk.CTkLabel(self, text="System", font=hfonts.header_0_font).grid(row=0, column=0, columnspan=1, pady=(0,5), sticky="nwe")
+
+        parameter_frame = ctk.CTkFrame(self)
+        parameter_frame.grid(row=1, column=0, pady=(0,5), sticky='nw')
+        self.cpu_temp_label = ctk.CTkLabel(parameter_frame, text='CPU Temp: ', font=hfonts.header_3_font)
+        self.cpu_temp_label.grid(row=0, column=0, sticky="nw")
+        self.cpu_temp_value = ctk.CTkLabel(parameter_frame, text='XX°C', font=hfonts.header_3_font)
+        self.cpu_temp_value.grid(row=0, column=1, sticky="nw")
+
+        self.led_label = ctk.CTkLabel(parameter_frame, text='LED: ', font=hfonts.header_3_font)
+        self.led_label.grid(row=1, column=0, sticky="nw")
+        self.led_switch = ctk.CTkSwitch(parameter_frame, onvalue=True, text='', offvalue=False, command=lambda: bus.emit('gui:led_switch_change', self))
+        self.led_switch.grid(row=1, column=1, sticky="nw")
+
+
+class SMPSParameters(ctk.CTkFrame):
+    def __init__(self, root):
+        super().__init__(root, fg_color="transparent")
+        self.label = ctk.CTkLabel(self, text="SMPS", font=hfonts.header_0_font).grid(row=0, column=0, columnspan=1, pady=(0,5), sticky="nwe")
+
+        parameter_frame = ctk.CTkFrame(self)
+        parameter_frame.grid(row=1, column=0, pady=(0,0), sticky='nw')
+
+        xpad = (10, 10)
+        duty_frame = ctk.CTkFrame(parameter_frame, fg_color='transparent')
+        duty_frame.grid(row=1, column=0, padx=xpad, pady=(10, 0), sticky='nwe')
+        self.duty_label = ctk.CTkLabel(duty_frame, text='Duty Cycle: ', font=hfonts.header_3_font)
+        self.duty_label.grid(row=0, column=0, sticky="w")
+        self.duty_frame = EntryWithButtons(duty_frame, emit_message='gui:duty_cycle_change', font=hfonts.header_1_font, default=0.00)
+        self.duty_frame.grid(row=0, column=1, sticky="e")
+
+        parameter_frame = ctk.CTkFrame(parameter_frame, fg_color='transparent')
+        parameter_frame.grid(row=2, column=0, padx=xpad, pady=(0,5), sticky='nwe')
+        self.duty_label = ctk.CTkLabel(parameter_frame, text='Dead Band: ', font=hfonts.header_3_font)
+        self.duty_label.grid(row=0, column=0, sticky="w")
+        self.duty_frame = EntryWithButtons(parameter_frame, format='{}', num_type=int, emit_message='gui:dead_band_change', font=hfonts.header_1_font, default=24)
+        self.duty_frame.grid(row=0, column=1, sticky="e")
 
 
 class EntryWithButtons(ctk.CTkFrame):
@@ -183,7 +234,7 @@ class App(ctk.CTk):
 
         # configure window
         self.title("CustomTkinter complex_example.py")
-        self.geometry(f"{1800}x{1000}")
+        self.geometry(f"{1200}x{800}")
 
         # configure grid layout (4x4)
         self.grid_columnconfigure(1, weight=1)
@@ -210,75 +261,12 @@ class App(ctk.CTk):
         self.scaling_optionemenu = ctk.CTkOptionMenu(self.sidebar_frame, values=["80%", "90%", "100%", "110%", "120%"], command=self.change_scaling_event)
         self.scaling_optionemenu.grid(row=8, column=0, padx=20, pady=(10, 20))
 
-        # # Create an area for input and output information to be displayed
-        # # create slider and progressbar frame
-        # # self.status_frame = ctk.CTkFrame(self, fg_color="black", corner_radius=5)
-        # self.status_frame = ctk.CTkFrame(self, corner_radius=5)
-        # self.status_frame.grid(row=0, column=1, columnspan=2, padx=(20, 20), pady=(20, 20), sticky="nsew")
-        # # self.status_frame.grid(row=1, column=1, sticky="nsew")
-        # self.status_frame.grid_columnconfigure(4, weight=1)
-        # self.status_frame.grid_rowconfigure(4, weight=1)
-        #
-        # self.status_frame.grid_columnconfigure(0, pad=self.small_pad)
-        # self.status_frame.grid_columnconfigure(1, pad=self.small_pad)
-        # self.status_frame.grid_rowconfigure(1, pad=self.small_pad)
-        # self.status_frame.grid_rowconfigure(2, pad=self.small_pad)
-        # self.status_frame.grid_rowconfigure(3, pad=self.small_pad)
-
-        self.regulator_values = RegulatorValues(self)
-        self.regulator_values.grid(row=0, column=1, padx=(20, 20), pady=(10, 20), sticky='nw')
-
-        # self.v_in_frame = ValueWithUnits(self.status_frame, label="V:  ", value="...", units="  V",
-        #                                  label_unit_width=hfonts.header_1_font.cget('size') * 2, value_width=40,
-        #                                  font=hfonts.header_1_font)
-        # self.v_in_frame.grid(row=1, column=0, sticky="nw")
-        # self.get_v_in, self.set_v_in = self.v_in_frame.get_set_factory()
-        # self.i_in_frame = ValueWithUnits(self.status_frame, label="I:  ", value="...", units="  A",
-        #                                  label_unit_width=hfonts.header_1_font.cget('size') * 2, value_width=40,
-        #                                  font=hfonts.header_1_font)
-        # self.i_in_frame.grid(row=2, column=0, sticky="nw")
-        # self.get_i_in, self.set_i_in = self.i_in_frame.get_set_factory()
-        # self.p_in_frame = ValueWithUnits(self.status_frame, label="P:  ", value="...", units="  W",
-        #                                  label_unit_width=hfonts.header_1_font.cget('size') * 2, value_width=40,
-        #                                  font=hfonts.header_1_font)
-        # self.p_in_frame.grid(row=3, column=0, sticky="nw")
-        # self.get_p_in, self.set_p_in = self.p_in_frame.get_set_factory()
-
-        # self.v_out_frame = ValueWithUnits(self.status_frame, label="V:  ", value="...", units="  V",
-        #                                   label_unit_width=hfonts.header_1_font.cget('size') * 2, value_width=40,
-        #                                   font=hfonts.header_1_font)
-        # self.v_out_frame.grid(row=1, column=1, sticky="nw")
-        # self.get_v_out, self.set_v_out = self.v_out_frame.get_set_factory()
-        # self.i_out_frame = ValueWithUnits(self.status_frame, label="I:  ", value="...", units="  A",
-        #                                   label_unit_width=hfonts.header_1_font.cget('size') * 2, value_width=40,
-        #                                   font=hfonts.header_1_font)
-        # self.i_out_frame.grid(row=2, column=1, sticky="nw")
-        # self.get_i_out, self.set_i_out = self.i_out_frame.get_set_factory()
-        # self.p_out_frame = ValueWithUnits(self.status_frame, label="P:  ", value="...", units="  W",
-        #                                   label_unit_width=hfonts.header_1_font.cget('size') * 2, value_width=40,
-        #                                   font=hfonts.header_1_font)
-        # self.p_out_frame.grid(row=3, column=1, sticky="nw")
-        # self.get_p_out, self.set_p_out = self.p_out_frame.get_set_factory()
-        #
-        # self.e_frame = ValueWithUnits(self.status_frame, label="E:  ", value="...", units="  %",
-        #                               label_unit_width=hfonts.header_1_font.cget('size') * 2, value_width=40,
-        #                               font=hfonts.header_1_font)
-        # self.e_frame.grid(row=1, column=2, sticky="nw")
-        # self.e_frame.set_data_format('{:2.2f}')
-        # self.get_e, self.set_e = self.e_frame.get_set_factory()
-        # self.m_frame = ValueWithUnits(self.status_frame, label="M:  ", value="...", units="  X",
-        #                               label_unit_width=hfonts.header_1_font.cget('size') * 2, value_width=40,
-        #                               font=hfonts.header_1_font)
-        # self.m_frame.grid(row=2, column=2, sticky="nw")
-        # self.get_m, self.set_m = self.m_frame.get_set_factory()
-        # self.a_frame = ValueWithUnits(self.status_frame, label="A:  ", value="...", units="  %",
-        #                               label_unit_width=hfonts.header_1_font.cget('size') * 2, value_width=40,
-        #                               font=hfonts.header_1_font)
-        # self.a_frame.grid(row=3, column=2, sticky="nw")
-        # self.get_a, self.set_a = self.a_frame.get_set_factory()
-        # self.a_frame.set_data_format('{:2.2f}')
-
         #######################################################################################################################
+
+        self.right_frame = ctk.CTkFrame(self, fg_color="transparent").grid(row=0, column=1, sticky='nsew')
+
+        self.regulator_values = RegulatorValues(self.right_frame)
+        self.regulator_values.grid(row=0, column=1, padx=(10, 10), pady=(10, 0), sticky='nw')
 
         # self.duty_label = ctk.CTkLabel(self.status_frame, text='Duty Cycle: ', font=hfonts.header_1_font)
         # self.duty_label.grid(row=1, column=3, sticky="nw")
@@ -287,39 +275,27 @@ class App(ctk.CTk):
         #
         # self.dead_band_frame = EntryWithButtons(self.status_frame, format='{}', num_type=int, emit_message='gui:dead_band_change', font=hfonts.header_1_font, default=24)
         # self.dead_band_frame.grid(row=2, column=4, sticky="nw")
-        #
-        # self.v_in_offset_label = ctk.CTkLabel(self.status_frame, text='V In Offset: ', font=hfonts.header_1_font)
-        # self.v_in_offset_label.grid(row=3, column=3, sticky="nw")
-        # self.v_in_offset_frame = EntryWithButtons(self.status_frame, num_type=float, emit_message='gui:v_in_offset_change', font=hfonts.header_1_font, default=v_in_offset)
-        # self.v_in_offset_frame.grid(row=3, column=4, sticky="nw")
-        #
-        # self.v_in_multiplier_frame = EntryWithButtons(self.status_frame, num_type=float, emit_message='gui:v_in_multiplier_change', font=hfonts.header_1_font, default=v_in_multiplier)
-        # self.v_in_multiplier_frame.grid(row=4, column=4, sticky="nw")
-        #
-        # self.i_in_offset_frame = EntryWithButtons(self.status_frame, num_type=float, emit_message='gui:i_in_offset_change', font=hfonts.header_1_font, default=i_in_offset)
-        # self.i_in_offset_frame.grid(row=5, column=4, sticky="nw")
-        #
-        # self.v_out_offset_frame = EntryWithButtons(self.status_frame, num_type=float, emit_message='gui:v_out_offset_change', font=hfonts.header_1_font, default=v_out_offset)
-        # self.v_out_offset_frame.grid(row=6, column=4, sticky="nw")
-        #
-        # # self.estop_button = ctk.CTkButton(text="ESTOP",
-        #
-        # self.led_label = ctk.CTkLabel(self.status_frame, text='LED: ', font=hfonts.header_1_font)
-        # self.led_label.grid(row=10, column=3, sticky="nw")
-        # self.led_switch = ctk.CTkSwitch(self.status_frame, onvalue=True, offvalue=False, command=lambda: bus.emit('gui:led_switch_change', self))
-        # self.led_switch.grid(row=10, column=4, sticky="nw")
-        #
-        # self.message_box = ctk.CTkTextbox(self.status_frame, font=hfonts.regular_font)
-        # self.message_box.grid(row=11, column=0, columnspan=5, sticky="we")
-        #
 
-        self.tune_tab_frame = ctk.CTkFrame(self, fg_color='transparent')
+        sys_details = SystemDetails(self.right_frame)
+        sys_details.grid(row=1, column=2, pady=(10,0), padx=(10,10), sticky='nwe')
+
+        smps_parameters = SMPSParameters(self.right_frame)
+        smps_parameters.grid(row=1, column=1, pady=(10,0), padx=(10,10), sticky='nwe')
+
+        # self.message_box = MessageBox(self)
+        # self.message_box.grid(row=2, column=1, columnspan=3, pady=(10,0), sticky='nw')
+
+        self.message_box_label = ctk.CTkLabel(self.right_frame, text="Messages", font=hfonts.header_0_font).grid(row=2, column=1, columnspan=2, pady=(0,5), sticky="swe")
+        self.message_box = ctk.CTkTextbox(self.right_frame, font=hfonts.regular_font)
+        self.message_box.grid(row=3, column=1, padx=(10,10), pady=(0,10), columnspan=2, sticky="we")
+
+        self.tune_tab_frame = ctk.CTkFrame(self.right_frame, fg_color='transparent')
         self.tune_tab_frame.grid(row=0, column=2, pady=(10,0), sticky='nw')
         self.tune_tab_label = ctk.CTkLabel(self.tune_tab_frame, text="Tune", font=hfonts.header_0_font)
         self.tune_tab_label.grid(row=0, column=0, sticky='nwe')
 
         self.tune_tabs = ctk.CTkTabview(self.tune_tab_frame, width=250, height=180)
-        self.tune_tabs.grid(row=1, column=0, padx=(20, 20), pady=(0, 20), sticky="nw")
+        self.tune_tabs.grid(row=1, column=0, padx=(20, 20), pady=(0, 0), sticky="nw")
         button_height = hfonts.header_2_font.cget('size') * 2
         button_width = self.tune_tabs.cget('width')
 
