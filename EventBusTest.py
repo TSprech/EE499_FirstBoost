@@ -1,5 +1,3 @@
-from event_bus import EventBus
-
 import random
 import time
 import tkinter
@@ -11,96 +9,13 @@ import trio
 import logging
 from rich.logging import RichHandler
 import json
-
-bus = EventBus()
+import event_bus as bus
+import SerialJSON
 
 ctk.set_appearance_mode("System")  # Modes: "System" (standard), "Dark", "Light"
 ctk.set_default_color_theme("blue")  # Themes: "blue" (standard), "green", "dark-blue"
 
-
-class SerialJSON(serial.Serial):
-    """
-    Trio compatible wrapper for dealing with a serial port. Handles all port I/O operations and interfaces with other programs using two memory channels.
-    """
-
-    def __init__(self, eol_delimiter: str = '\r', channel_buffer_size=0, **kwargs):
-        """
-        :param eol_delimiter: The character (or string) that signifies the end of the JSON string being received.
-        :param channel_buffer_size: Number of element that can sit in the channel communication buffers, 0 means no buffering (typical).
-        :param kwargs: Same as the arguments that can be passed to a pyserial.SerialBase object.
-        """
-        super().__init__(**kwargs)
-        self.connected = False
-        self.eol_delimiter = eol_delimiter
-
-        @bus.on('serial:transmit')
-        def _internal_transmit_handler(data):  # Handles all of the transmit requests since emit would have to pass the 'self' paramter to the methods
-            self.tx_json(data)
-
-    def connect(self, com_port=None):
-        if com_port is not None:
-            self.setPort(com_port)  # Make sure that were actually trying to connect to a port
-            self.open()  # Handles the actual acquisition of the serial port
-            # Clear out any existing data
-            self.reset_input_buffer()
-            self.reset_output_buffer()
-            self.connected = True
-
-    def disconnect(self):
-        if self.connected:
-            self.close()  # Handles releasing the port back to the system to make it available again
-            self.connected = False
-
-    def update_functions(self, callback_time_s: float):
-        """
-        Gets a list of all async functions, should be added to the nursery.
-
-        .. code-block:: Python
-
-            async with trio.open_nursery() as nursery:
-                for func in sjson.update_functions(0.5):
-                    nursery.start_soon(func)
-
-        :param callback_time_s: The sleep time for each coroutine, lower = lower serial port latency.
-        :returns: A list of all async function handlers which handle the serial port.
-        """
-
-        async def rx_callback():
-            while True:
-                self.rx_json()
-                await trio.sleep(callback_time_s)
-
-        # async def tx_callback():
-        #     while True:
-        #         self.tx_json()
-        #         await trio.sleep(callback_time_s)
-
-        return [rx_callback]
-
-    # @bus.on('serial:transmit')
-    def tx_json(self, data):
-        try:
-            if self.connected:  # Don't try to send data if there is no device connected
-                # async for data in self._tx_receive_channel:  # Go through any (maybe no) data that has been queued to be sent out to the serial device
-                #     self.write((json.dumps(data) + self.eol_delimiter).encode("ascii"))  # For each, make sure it is encoded correctly
-                self.write((json.dumps(data) + self.eol_delimiter).encode("ascii"))  # For each, make sure it is encoded correctly
-        except serial.PortNotOpenError:
-            log.debug("Port no longer open, abandoning send")
-
-    def rx_json(self):
-        try:
-            if self.connected and self.in_waiting > 0:  # Don't try to read data if there is no device connected, or if nothing has arrived from the device
-                data = self.readline().decode("utf-8")  # Since there is data, read the full line as the JSON is sent as a single continuous line
-                try:
-                    json_object = json.loads(data)  # Convert from string to dictionary
-                    bus.emit('serial:receive', json_object)  # Take the dictionary and send it out the rx memory channel to be consumed by application
-                except json.JSONDecodeError as e:  # If any parsing error happens, report it (can happen if connecting to the device in the middle of a transmission)
-                    log.error(f"JSON Decode error: {e}")
-        except serial.SerialException:
-            log.debug("Port no longer open, abandoning receive")
-
-
-sjson = SerialJSON()
+sjson = SerialJSON.SerialJSON()
 
 
 class ValueWithUnits(ctk.CTkFrame):
@@ -135,39 +50,52 @@ class ValueWithUnits(ctk.CTkFrame):
 
 class EntryWithButtons(ctk.CTkFrame):
     # def __init__(self, root, label, value, units, label_unit_width, value_width, font):
-    def __init__(self, root, font, format='{:3.1f}', default=0):
+
+    def entry_lose_focus_callback(self):
+        print(f'Emit: {self.string_var.get()} by {self.emit_message}')
+        bus.emit(self.emit_message, self.string_var.get())
+        return True
+
+    def __init__(self, root, emit_message: str, font, format='{:3.1f}', num_type=float, default=0):
         super().__init__(root)
+        self.emit_message = emit_message
+        self.num_type = num_type
         self.grid_rowconfigure(0, weight=2)
         self.grid_columnconfigure(0, weight=2)
         self.grid_columnconfigure(1, weight=1)
         self.grid_columnconfigure(2, weight=1)
+
+        self.string_var = ctk.StringVar()
+        self.string_var.set(str(format.format(default)))
 
         # x, y, width, height = self.grid_bbox(2, 1)
         width = font.cget("size")
         self.dec_value_button = ctk.CTkButton(self, text='-', width=width * 1.5, command=self.dec_callback)
         self.dec_value_button.grid(row=2, column=1, pady=(0, 5), sticky="nsew")
 
-        self.value = ctk.CTkEntry(self, width=width * 3)
-        self.value.insert(0, str(format.format(default)))
+        self.value = ctk.CTkEntry(self, width=width * 3, textvariable=self.string_var, validate="focusout", validatecommand=self.entry_lose_focus_callback)
+        # self.value.insert(0, )
         self.value.grid(row=2, column=2, pady=(0, 5), sticky="nsew")
 
         self.inc_value_button = ctk.CTkButton(self, text='+', width=width * 1.5, command=self.inc_callback)
         self.inc_value_button.grid(row=2, column=3, padx=(0, 5), pady=(0, 5), sticky="nsew")
 
-    def get_value(self) -> float:
-        return float(self.value.get())
+    def get_value(self):
+        return self.num_type(self.value.get())
 
     def inc_callback(self):
-        value = float(self.value.get())
+        value = self.num_type(self.value.get())
         if value < 100:
             self.value.delete(0, 10)
             self.value.insert(0, value + 1)
+            self.entry_lose_focus_callback()
 
     def dec_callback(self):
-        value = float(self.value.get())
+        value = self.num_type(self.value.get())
         if value > 0:
             self.value.delete(0, 10)
             self.value.insert(0, value - 1)
+            self.entry_lose_focus_callback()
 
 
 class App(ctk.CTk):
@@ -201,8 +129,8 @@ class App(ctk.CTk):
         self.serial_label.grid(row=0, column=0, padx=20, pady=(20, 10))
         self.serial_port_optionmenu = ctk.CTkOptionMenu(self.sidebar_frame, dynamic_resizing=False, values=["Port"])
         self.serial_port_optionmenu.grid(row=1, column=0, padx=20, pady=10)
-        self.serial_port_connect_button = ctk.CTkButton(self.sidebar_frame, text='Connect',
-                                                        command=self.sidebar_button_event)
+        # self.serial_port_connect_button = ctk.CTkButton(self.sidebar_frame, text='Connect', command=self.sidebar_button_event)
+        self.serial_port_connect_button = ctk.CTkButton(self.sidebar_frame, text='Connect', command=lambda: bus.emit('gui:port_connect_button', self))
         self.serial_port_connect_button.grid(row=2, column=0, padx=20, pady=10)
         self.appearance_mode_label = ctk.CTkLabel(self.sidebar_frame, text="Appearance Mode:", anchor="w")
         self.appearance_mode_label.grid(row=5, column=0, padx=20, pady=(10, 0))
@@ -211,13 +139,13 @@ class App(ctk.CTk):
         self.appearance_mode_optionemenu.grid(row=6, column=0, padx=20, pady=(10, 10))
         self.scaling_label = ctk.CTkLabel(self.sidebar_frame, text="UI Scaling:", anchor="w")
         self.scaling_label.grid(row=7, column=0, padx=20, pady=(10, 0))
-        self.scaling_optionemenu = ctk.CTkOptionMenu(self.sidebar_frame, values=["80%", "90%", "100%", "110%", "120%"],
-                                                     command=self.change_scaling_event)
+        self.scaling_optionemenu = ctk.CTkOptionMenu(self.sidebar_frame, values=["80%", "90%", "100%", "110%", "120%"], command=self.change_scaling_event)
         self.scaling_optionemenu.grid(row=8, column=0, padx=20, pady=(10, 20))
 
         # Create an area for input and output information to be displayed
         # create slider and progressbar frame
-        self.status_frame = ctk.CTkFrame(self, fg_color="black", corner_radius=5)
+        # self.status_frame = ctk.CTkFrame(self, fg_color="black", corner_radius=5)
+        self.status_frame = ctk.CTkFrame(self, corner_radius=5)
         self.status_frame.grid(row=0, column=1, columnspan=2, padx=(20, 20), pady=(20, 20), sticky="nsew")
         # self.status_frame.grid(row=1, column=1, sticky="nsew")
         self.status_frame.grid_columnconfigure(4, weight=1)
@@ -287,8 +215,20 @@ class App(ctk.CTk):
         self.get_a, self.set_a = self.a_frame.get_set_factory()
         self.a_frame.set_data_format('{:2.2f}')
 
-        self.duty_frame = EntryWithButtons(self.status_frame, font=self.header_1_font, default=100.00)
-        self.duty_frame.grid(row=1, column=3, sticky="nw")
+        self.duty_label = ctk.CTkLabel(self.status_frame, text='Duty Cycle: ', font=self.header_1_font)
+        self.duty_label.grid(row=1, column=3, sticky="nw")
+        self.duty_frame = EntryWithButtons(self.status_frame, emit_message='gui:duty_cycle_change', font=self.header_1_font, default=0.00)
+        self.duty_frame.grid(row=1, column=4, sticky="nw")
+
+        self.dead_band_frame = EntryWithButtons(self.status_frame, format='{}', num_type=int, emit_message='gui:dead_band_change', font=self.header_1_font, default=24)
+        self.dead_band_frame.grid(row=2, column=4, sticky="nw")
+
+        # self.estop_button = ctk.CTkButton(text="ESTOP",
+
+        self.led_label = ctk.CTkLabel(self.status_frame, text='LED: ', font=self.header_1_font)
+        self.led_label.grid(row=3, column=3, sticky="nw")
+        self.led_switch = ctk.CTkSwitch(self.status_frame, onvalue=True, offvalue=False, command=lambda: bus.emit('gui:led_switch_change', self))
+        self.led_switch.grid(row=3, column=4, sticky="nw")
 
     def open_input_dialog_event(self):
         dialog = ctk.CTkInputDialog(text="Type in a number:", title="CTkInputDialog")
@@ -301,19 +241,34 @@ class App(ctk.CTk):
         new_scaling_float = int(new_scaling.replace("%", "")) / 100
         ctk.set_widget_scaling(new_scaling_float)
 
-    def sidebar_button_event(self):
-        option = self.serial_port_optionmenu.get()
-        if not option == 'Port':
-            if not sjson.connected:
-                port_name = option.split(' ')[0]
-                sjson.connect(com_port=port_name)
-                self.serial_port_connect_button.configure(text='Disconnect')
-            else:
-                sjson.disconnect()
-                self.serial_port_connect_button.configure(text='Connect')
-
 
 app = App()
+
+
+@bus.on('gui:port_connect_button')
+def port_connect_button_handler(gui: App):
+    if not hasattr(port_connect_button_handler, "connected"):  # Used like static function variables in C++, just maintains state between function calls
+        port_connect_button_handler.connected = False
+
+    @bus.on('serial:connected')
+    def _change_connected_button():
+        port_connect_button_handler.connected = True
+        app.serial_port_connect_button.configure(text='Disconnect')
+
+    @bus.on('serial:disconnected')
+    def _change_disconnected_button():
+        port_connect_button_handler.connected = False
+        app.serial_port_connect_button.configure(text='Connect')
+
+    option = gui.serial_port_optionmenu.get()
+    if not option == 'Port':
+        if not port_connect_button_handler.connected:
+            port_name = option.split(' ')[0]
+            bus.emit('serial:connect', port_name)
+        else:
+            bus.emit('serial:disconnect')
+
+
 # logging.basicConfig(level=logging.DEBUG)
 FORMAT = "%(message)s"
 logging.basicConfig(
@@ -323,67 +278,62 @@ logging.basicConfig(
 log = logging.getLogger("rich")
 
 
-# async def generate_transmit_json(send_channel: trio.MemorySendChannel):
-async def generate_transmit_json():
-    state = True
-    while True:
-        # await rec_channel.receive()
-        # async for json_data in rec_channel:
-        doc = {"LED": state}
-        state = not state
-        try:
-            # await send_channel.send(doc)
-            bus.emit('serial:transmit', doc)
-        except trio.WouldBlock:
-            pass
-        # doc["SMPS"]["Duty"] = app.get_duty()
-        # doc["SMPS"]["DeadBand"] = app.get_dead_band()
-        # doc["SMPS"]["Frequency"] = app.get_frequency()
-        # doc_str = json.dumps(doc)
-        await trio.sleep(1)
+@bus.on('gui:led_switch_change')
+def led_switch_handler(gui: App):
+    doc = {"Control": {"LED": gui.led_switch.get()}}
+    bus.emit('serial:transmit', doc)
 
 
-# async def updated_from_json(rec_channel: trio.MemoryReceiveChannel):
+@bus.on('gui:duty_cycle_change')
+def duty_cycle_change_handler(value: str):
+    doc = {"SMPS": {"Duty": float(value)}}
+    bus.emit('serial:transmit', doc)
+
+
+@bus.on('gui:dead_band_change')
+def daed_band_change_handler(value: str):
+    doc = {"SMPS": {"DeadBand": int(value)}}
+    bus.emit('serial:transmit', doc)
+
+
 @bus.on('serial:receive')
-def updated_from_json(data: dict):
-    # while True:
-    # async for json_data in rec_channel:
-    print(data)
-    # # json_formatted_str = json.dumps(json_data, indent=2)
-    # # log.error(json_formatted_str)
-    # # app.set_v_in(json_data['in']['volts'])
-    # # app.set_i_in(json_data['in']['amps'])
-    # # app.set_p_in(float(app.get_v_in()) * float(app.get_i_in()))
-    # #
-    # # v_out = random.randrange(1, 6) + random.random()
-    # # i_out = random.random()
-    # # # app.set_v_out(data['out']['volts'])
-    # # app.set_v_out(v_out)
-    # # # app.set_i_out(data['out']['amps'])
-    # # app.set_i_out(i_out)
-    # # app.set_p_out(float(app.get_v_out()) * float(app.get_i_out()))
-    # #
-    # # app.set_m(float(app.get_v_out()) / float(app.get_v_in()))
-    # # app.set_e(float(app.get_p_out()) / float(app.get_p_in()) * 100)
-    # await trio.sleep(1 / 30)
+def updated_from_json(json_data: dict):
+    # json_formatted_str = json.dumps(json_data, indent=2)
+    # log.debug(json_formatted_str)
+    app.set_v_in(json_data["SMPS"]['In']['Volts'] * 2)
+    app.set_i_in(json_data["SMPS"]['In']['Amps'])
+    # app.set_p_in(float(app.get_v_in()) * float(app.get_i_in()))
+
+    app.set_v_out(json_data["SMPS"]['Out']['Volts'] * 9.8)
+    app.set_i_out(json_data["SMPS"]['Out']['Amps'])
+    # app.set_p_out(float(app.get_v_out()) * float(app.get_i_out()))
+    #
+    # app.set_m(float(app.get_v_out()) / float(app.get_v_in()))
+    # app.set_e(float(app.get_p_out()) / float(app.get_p_in()) * 100)
+
+    # print(f"A Level: {json_data['SMPS']['ALevel']}")
+    # print(f"B Level: {json_data['SMPS']['BLevel']}")
+    # print(f"Duty: {json_data['SMPS']['InDuty']}")
+    # print(f"Deadband: {json_data['SMPS']['InDeadBand']}")
+    # print(f"Top: {json_data['SMPS']['Top']}")
 
 
-async def get_com_ports(send_channel: trio.MemorySendChannel):
+async def get_com_ports():
     while True:
-        await send_channel.send(comports())
+        bus.emit('serial:port_list', comports())  # Send out the newest list of serial ports
         await trio.sleep(0.5)
 
 
-async def update_com_ports(rec_channel: trio.MemoryReceiveChannel):
-    last_com_ports = []  # Used to keep track of if the port list has changed
-    while True:
-        async for com_port in rec_channel:
-            ports = [str(port_name) for port_name in com_port]  # Get a list of the port names as strings
-            if not ports == last_com_ports:  # If the ports have changed
-                log.debug(f'Serial port list changed, new ports: {ports}')
-                app.serial_port_optionmenu.configure(values=ports)  # Change the option menu to reflect the new ports
-                last_com_ports = ports  # Update the last ports for checking in the future
-        await trio.sleep(0.25)  # Only check for new ports every second
+@bus.on('serial:port_list')
+def update_com_ports(com_port_list: list):
+    if not hasattr(update_com_ports, "last_com_ports"):  # Used like static function variables in C++, just maintains state between function calls
+        update_com_ports.last_com_ports = []  # Used to keep track of if the port list has changed
+
+    ports = [str(port_name) for port_name in com_port_list]  # Get a list of the port names as strings
+    if not ports == update_com_ports.last_com_ports:  # If the ports have changed
+        log.debug(f'Serial port list changed, new ports: {ports}')
+        app.serial_port_optionmenu.configure(values=ports)  # Change the option menu to reflect the new ports
+        update_com_ports.last_com_ports = ports  # Update the last ports for checking in the future
 
 
 async def tkloop():
@@ -393,34 +343,16 @@ async def tkloop():
         try:
             app.update()  # Update all the TKinter widgets
         except:
+            app.quit()
             exit(0)
         await trio.sleep(1 / 60)  # Run at 60 FPS
 
 
-# async def UpdateJSerial():
-#     while True:
-#         # await sjson.update()
-#         await sjson.tx_json()
-#         await trio.sleep(0.25)
-#
-#
-# async def UpdateJSerial2():
-#     while True:
-#         # await sjson.update()
-#         await sjson.rx_json()
-#         await trio.sleep(0.25)
-
-
 async def main():
     async with trio.open_nursery() as nursery:
-        send_channel, receive_channel = trio.open_memory_channel(0)
-        nursery.start_soon(update_com_ports, receive_channel)
-        nursery.start_soon(get_com_ports, send_channel)
+        nursery.start_soon(get_com_ports)
         nursery.start_soon(tkloop)
-        for func in sjson.update_functions(0.5):
-            nursery.start_soon(func)
-        nursery.start_soon(generate_transmit_json)
-        # nursery.start_soon(updated_from_json, sjson.get_rx_channel)
+        nursery.start_soon(sjson.async_update(0.005))
         # Duty cycle adjustment, dead band adjustment, VIO/IIO, Protection Control, LED heartbeat, ESTOP (set duty cycle to limits)
 
 

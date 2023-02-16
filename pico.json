@@ -3,6 +3,7 @@
     "EStop": false,
     "Duty": 0,
     "DeadBand": 0,
+    "FrequencyKHz": 100,
     "Protection": false
   },
   "Control": {

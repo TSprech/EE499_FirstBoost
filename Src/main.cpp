@@ -14,8 +14,12 @@ constexpr auto LED_PIN = PICO_DEFAULT_LED_PIN;
 
 using namespace nlohmann;
 
-inline auto ParseLED(json& j) -> void {
-  gpio_put(LED_PIN, j["Control"]["LED"]);
+inline auto CheckKeyThenCall(json& json_doc, std::string_view key, auto callback) -> void {
+  if (json_doc.contains(key)) callback(json_doc[key]);
+}
+
+inline auto BuiltInLED(bool state) -> void {
+  gpio_put(LED_PIN, state);
 }
 
 inline auto ParseEStop(json& j) -> void {
@@ -24,83 +28,151 @@ inline auto ParseEStop(json& j) -> void {
   }
 }
 
-inline auto SMPSFrequency(uint32_t freq_khz, auto slice) {
-  pwm_set_wrap(slice, 625 - 1);
+uint16_t pwm_a = 0;
+uint16_t pwm_b = 0;
+uint16_t deadband = 0;
+float duty = 0;
 
-}
+struct PWMManager {
+  explicit PWMManager(uint8_t slice_number) : slice_number_(slice_number) {}
 
-// 12-bit conversion, assume max value == ADC_VREF == 3.3 V
-constexpr float conversion_factor = 3.3f / (1 << 12);
-
-
-const uint startLineLength = 8; // the linebuffer will automatically grow for longer lines
-const char eof = 255;           // EOF in stdio.h -is -1, but getchar returns int 255 to avoid blocking
-
-/*
- *  read a line of any  length from stdio (grows)
- *
- *  @param fullDuplex input will echo on entry (terminal mode) when false
- *  @param linebreak defaults to "\n", but "\r" may be needed for terminals
- *  @return entered line on heap - don't forget calling free() to get memory back
- */
-static char * getLine(bool fullDuplex = true, char lineBreak = '\n') {
-  // th line buffer
-  // will allocated by pico_malloc module if <cstdlib> gets included
-  char * pStart = (char*)malloc(startLineLength);
-  char * pPos = pStart;  // next character position
-  size_t maxLen = startLineLength; // current max buffer size
-  size_t len = maxLen; // current max length
-  int c;
-
-  if(!pStart) {
-    return NULL; // out of memory or dysfunctional heap
+  [[nodiscard]]
+  auto Top() const -> uint32_t {
+    return pwm_hw->slice[slice_number_].top;
   }
 
-  while(1) {
-    c = getchar(); // expect next character entry
-    if(c == eof || c == lineBreak) {
-      break;     // non blocking exit
-    }
-
-    if (fullDuplex) {
-      putchar(c); // echo for fullDuplex terminals
-    }
-
-    if(--len == 0) { // allow larger buffer
-      len = maxLen;
-      // double the current line buffer size
-      char *pNew  = (char*)realloc(pStart, maxLen *= 2);
-      if(!pNew) {
-        free(pStart);
-        return NULL; // out of memory abort
-      }
-      // fix pointer for new buffer
-      pPos = pNew + (pPos - pStart);
-      pStart = pNew;
-    }
-
-    // stop reading if lineBreak character entered
-    if((*pPos++ = c) == lineBreak) {
-      break;
-    }
+  auto DeadBand(uint16_t count) {
+    deadband = count;
+    deadband_ = count;
   }
 
-  *pPos = '\0';   // set string end mark
-  return pStart;
+//  auto DeadBandUs() {
+//    return ;
+//  }
+
+  auto SMPSFrequencyKHz(uint16_t freq_khz) {
+    constexpr auto f_sys_khz = 125000000 / 1000;
+    auto top = (f_sys_khz / freq_khz / 2) - 1;
+    pwm_set_wrap(slice_number_, top);
+  }
+
+  auto SMPSFrequencyKHz() -> uint16_t {
+    constexpr auto f_sys_khz = 125000000 / 1000;
+    return 1 / ((Top() + 1) * 2 / f_sys_khz);
+  }
+
+  auto SimpleDuty(uint16_t duty_cycle) {
+    auto top = Top();
+    uint16_t a_level = 0;
+    uint16_t b_level = 0;
+    if (duty_cycle == 0) {
+      a_level = 0;
+      b_level = top;
+    }
+
+    a_level -= deadband_/2;
+    b_level += deadband_/2;
+
+    pwm_set_both_levels(slice_number_, a_level, b_level);
+  }
+
+
+  auto SMPSDuty(float duty_cycle_percentage) {
+    duty = duty_cycle_percentage / 100;
+    auto top = Top();
+    uint16_t a_level = 0;
+    uint16_t b_level = 0;
+    if (duty_cycle_percentage < 1) {
+      a_level = 0;
+      b_level = 0;
+    } else if (duty_cycle_percentage > 99) {
+      a_level = top;
+      b_level = top;
+    } else {
+      a_level = std::floor(top * (duty_cycle_percentage / 100));
+      b_level = a_level;
+      a_level -= deadband_;
+      b_level += deadband_;
+    }
+
+    pwm_a = a_level;
+    pwm_b = b_level;
+
+    pwm_set_both_levels(slice_number_, a_level, b_level);
+  }
+
+  auto Initialize() -> void {
+      // Tell GPIO 0 and 1 they are allocated to the PWM
+      gpio_set_function(0, GPIO_FUNC_PWM);
+      gpio_set_function(1, GPIO_FUNC_PWM);
+
+      gpio_disable_pulls(0);
+      gpio_disable_pulls(1);
+
+      gpio_set_slew_rate(0, GPIO_SLEW_RATE_FAST);
+      gpio_set_slew_rate(1, GPIO_SLEW_RATE_FAST);
+
+      gpio_set_drive_strength(0, GPIO_DRIVE_STRENGTH_12MA);
+      gpio_set_drive_strength(1, GPIO_DRIVE_STRENGTH_12MA);
+
+      pwm_set_wrap(slice_number_, 625 - 1);
+//    //  pwm_set_both_levels(slice, 5000, 1250);
+      pwm_set_both_levels(slice_number_, 295, 335);
+      pwm_set_phase_correct(slice_number_, true);
+      pwm_set_output_polarity(slice_number_, false, false);
+//      SMPSFrequencyKHz(100);
+//      SMPSDuty(50);
+      pwm_set_enabled(slice_number_, true); // Start PWM running
+  }
+
+  const uint8_t slice_number_;
+  uint16_t deadband_ = 24;
+};
+
+enum class ADC_Channels : uint8_t {
+  voltage_in = 0,
+  current_in = 1,
+  voltage_out = 2,
+  current_out = 3,
+  cpu_temperature = 4
+};
+
+auto ADCVoltage(ADC_Channels channel) -> float {
+  constexpr float conversion_factor = 3.3f / (1 << 12); // 12-bit conversion, assume max value == ADC_VREF == 3.3 V
+
+  adc_select_input(static_cast<uint>(channel));
+  auto adc_value = adc_read();
+  return static_cast<float>(adc_value) * conversion_factor;
 }
 
+auto ADCCurrent(ADC_Channels channel, uint16_t shunt_mohm, float offset, float gain) -> float {
+  auto raw = ADCVoltage(channel);
+  auto shunt_voltage = (raw-offset) * gain;
+  return shunt_voltage / (static_cast<float>(shunt_mohm) / 1000);
+}
+
+float ADCTemperatureC() {
+  constexpr float conversion_factor = 3.3f / (1 << 12); // 12-bit conversion, assume max value == ADC_VREF == 3.3 V
+
+  adc_select_input(static_cast<uint>(ADC_Channels::cpu_temperature));
+  float adc = (float)adc_read() * conversion_factor;
+  return 27.0F - (adc - 0.706F) / 0.001721F;
+}
+
+PWMManager pwm_manager(pwm_gpio_to_slice_num(0));
 
 int main() {
   stdio_init_all();
 
-//  adc_init();
-//  adc_gpio_init(26);
-//  adc_gpio_init(27);
-//  adc_gpio_init(28);
-//  adc_gpio_init(29);
-//
-//  adc_select_input(0);
-//
+  adc_init();
+  adc_gpio_init(26);
+  adc_gpio_init(27);
+  adc_gpio_init(28);
+  adc_gpio_init(29);
+  adc_set_temp_sensor_enabled(true);
+
+  pwm_manager.Initialize();
+
 //  // Tell GPIO 0 and 1 they are allocated to the PWM
 //  gpio_set_function(0, GPIO_FUNC_PWM);
 //  gpio_set_function(1, GPIO_FUNC_PWM);
@@ -131,41 +203,39 @@ int main() {
   json j;
 
   while(true) {
-    auto end = GetLine(buf, '\r');
-//    char *pLine = getLine(true, '\r');
-    if (end != buf.begin()) {
-      //      printf("returned empty - nothing blocked");
-      //    } else {
-      //      std::string_view s = std::string_view(pLine, strlen(pLine));
-
-      //      j = json::parse(s);
-      j = json::parse(buf.begin(), end);
-      if (j["LED"] == true) {
-        gpio_put(LED_PIN, true);
-      } else {
-        gpio_put(LED_PIN, false);
+    auto in_str = GetLine(buf, '\r');
+    if (!in_str.empty()) {
+      j = json::parse(in_str);
+      if (j.contains("SMPS")) {
+//        CheckKeyThenCall(j["SMPS"], "Duty", [&](auto duty){pwm_manager.SMPSDuty(duty);});
+        if (j["SMPS"].contains("Duty")) pwm_manager.SMPSDuty(j["SMPS"]["Duty"]);
+//        CheckKeyThenCall(j["SMPS"], "DeadBand", [&](auto dead_band){pwm_manager.DeadBand(dead_band);});
+        if (j["SMPS"].contains("DeadBand")) pwm_manager.DeadBand(j["SMPS"]["DeadBand"]);
+//        CheckKeyThenCall(j["SMPS"], "Frequency", [&](auto frequency_khz){pwm_manager.SMPSFrequencyKHz(frequency_khz);});
+        if (j["SMPS"].contains("Frequency")) pwm_manager.SMPSFrequencyKHz(j["SMPS"]["Frequency"]);
+      }
+      if (j.contains("Control")) {
+        CheckKeyThenCall(j["Control"], "LED", BuiltInLED);
       }
     }
-//    }
-      j.clear();
-
-    j["in"]["volts"] = 5.218852;
-    j["in"]["amps"] = 0.391453;
-    std::string json_str = j.dump();
-
-    puts(json_str.data());
-
     j.clear();
-    sleep_ms(2);
 
+    j["SMPS"]["In"]["Volts"] = ADCVoltage(ADC_Channels::voltage_in);
+    j["SMPS"]["Out"]["Volts"] = ADCVoltage(ADC_Channels::voltage_out);
+    j["SMPS"]["In"]["Amps"] = ADCCurrent(ADC_Channels::current_in, 100, 1.665, 1);
+    j["SMPS"]["Out"]["Amps"] = ADCCurrent(ADC_Channels::current_out, 100, 1.665, 1);
+    j["System"]["Temp"] = ADCTemperatureC();
+    j["SMPS"]["FrequencyKHz"] = pwm_manager.SMPSFrequencyKHz();
+    j["SMPS"]["ALevel"] = pwm_a;
+    j["SMPS"]["BLevel"] = pwm_b;
+    j["SMPS"]["InDuty"] = duty;
+    j["SMPS"]["InDeadBand"] = deadband;
+    j["SMPS"]["Top"] = pwm_manager.Top();
+    std::string json_str = j.dump();
+    puts(json_str.data());
+    j.clear();
 
-//    tight_loop_contents();
-//    for (auto adc = 0; adc < 4; ++adc) {
-//      adc_select_input(adc);
-//      uint16_t result = adc_read();
-//      printf("ADC #: %i, Raw value: 0x%03x, voltage: %f V\n", adc, result, result * conversion_factor);
-//    }
-//    sleep_ms(500);
+    sleep_ms(10);
   }
 }
 
