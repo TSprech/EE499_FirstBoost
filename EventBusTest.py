@@ -1,14 +1,9 @@
-import random
-import time
-import tkinter
-import tkinter.messagebox
 import customtkinter as ctk
 from serial.tools.list_ports import comports
 import serial
 import trio
 import logging
 from rich.logging import RichHandler
-import json
 import event_bus as bus
 import SerialJSON
 import Headers as hfonts
@@ -17,7 +12,6 @@ ctk.set_appearance_mode("System")  # Modes: "System" (standard), "Dark", "Light"
 ctk.set_default_color_theme("blue")  # Themes: "blue" (standard), "green", "dark-blue"
 
 sjson = SerialJSON.SerialJSON()
-
 
 v_in_offset = 0.0
 v_in_multiplier = 2.0
@@ -30,6 +24,7 @@ i_in_gain = 1.0
 
 i_out_offset = 1.65
 i_out_gain = 1.0
+
 
 class ValueWithUnits(ctk.CTkFrame):
     def __init__(self, root, label, value, units, label_unit_width, value_width, font):
@@ -69,44 +64,35 @@ class RegulatorValues(ctk.CTkFrame):
         self.out_label = ctk.CTkLabel(self, text="Other", font=hfonts.header_0_font).grid(row=0, column=2, columnspan=1, sticky="nwe")
 
         in_frame = ctk.CTkFrame(self)
-        in_frame.grid(row=1, column=0, pady=(0,5), sticky='nw')
+        in_frame.grid(row=1, column=0, pady=(0, 5), sticky='nw')
 
-        self.v_in_frame = ValueWithUnits(in_frame, label="V:  ", value="...", units="  V", label_unit_width=hfonts.header_1_font.cget('size') * 2, value_width=40, font=hfonts.header_1_font)
-        self.v_in_frame.grid(row=1, column=0, pady=(10,10), sticky="nw")
-        self.get_v_in, self.set_v_in = self.v_in_frame.get_set_factory()
-        self.i_in_frame = ValueWithUnits(in_frame, label="I:  ", value="...", units="  A", label_unit_width=hfonts.header_1_font.cget('size') * 2, value_width=40, font=hfonts.header_1_font)
-        self.i_in_frame.grid(row=2, column=0, pady=(10,10), sticky="nw")
-        self.get_i_in, self.set_i_in = self.i_in_frame.get_set_factory()
-        self.p_in_frame = ValueWithUnits(in_frame, label="P:  ", value="...", units="  W", label_unit_width=hfonts.header_1_font.cget('size') * 2, value_width=40, font=hfonts.header_1_font)
-        self.p_in_frame.grid(row=3, column=0, pady=(10,10), sticky="nw")
-        self.get_p_in, self.set_p_in = self.p_in_frame.get_set_factory()
+        self.v_in_frame = ValueWithUnits(in_frame, label="V:  ", value="123.4", units="  V", label_unit_width=hfonts.header_1_font.cget('size') * 2, value_width=40, font=hfonts.header_1_font)
+        self.v_in_frame.grid(row=1, column=0, pady=(10, 10), sticky="nw")
+        self.i_in_frame = ValueWithUnits(in_frame, label="I:  ", value="123.4", units="  A", label_unit_width=hfonts.header_1_font.cget('size') * 2, value_width=40, font=hfonts.header_1_font)
+        self.i_in_frame.grid(row=2, column=0, pady=(10, 10), sticky="nw")
+        self.p_in_frame = ValueWithUnits(in_frame, label="P:  ", value="123.4", units="  W", label_unit_width=hfonts.header_1_font.cget('size') * 2, value_width=40, font=hfonts.header_1_font)
+        self.p_in_frame.grid(row=3, column=0, pady=(10, 10), sticky="nw")
 
         out_frame = ctk.CTkFrame(self)
-        out_frame.grid(row=1, column=1, padx=(10,10), pady=(0,5), sticky='nw')
+        out_frame.grid(row=1, column=1, padx=(10, 10), pady=(0, 5), sticky='nw')
 
-        self.v_out_frame = ValueWithUnits(out_frame, label="V:  ", value="...", units="  V", label_unit_width=hfonts.header_1_font.cget('size') * 2, value_width=40, font=hfonts.header_1_font)
-        self.v_out_frame.grid(row=1, column=1, pady=(10,10), sticky="nw")
-        self.get_v_out, self.set_v_out = self.v_out_frame.get_set_factory()
-        self.i_out_frame = ValueWithUnits(out_frame, label="I:  ", value="...", units="  A", label_unit_width=hfonts.header_1_font.cget('size') * 2, value_width=40, font=hfonts.header_1_font)
-        self.i_out_frame.grid(row=2, column=1, pady=(10,10), sticky="nw")
-        self.get_i_out, self.set_i_out = self.i_out_frame.get_set_factory()
-        self.p_out_frame = ValueWithUnits(out_frame, label="P:  ", value="...", units="  W", label_unit_width=hfonts.header_1_font.cget('size') * 2, value_width=40, font=hfonts.header_1_font)
-        self.p_out_frame.grid(row=3, column=1, pady=(10,10), sticky="nw")
-        self.get_p_out, self.set_p_out = self.p_out_frame.get_set_factory()
+        self.v_out_frame = ValueWithUnits(out_frame, label="V:  ", value="123.4", units="  V", label_unit_width=hfonts.header_1_font.cget('size') * 2, value_width=40, font=hfonts.header_1_font)
+        self.v_out_frame.grid(row=1, column=1, pady=(10, 10), sticky="nw")
+        self.i_out_frame = ValueWithUnits(out_frame, label="I:  ", value="123.4", units="  A", label_unit_width=hfonts.header_1_font.cget('size') * 2, value_width=40, font=hfonts.header_1_font)
+        self.i_out_frame.grid(row=2, column=1, pady=(10, 10), sticky="nw")
+        self.p_out_frame = ValueWithUnits(out_frame, label="P:  ", value="123.4", units="  W", label_unit_width=hfonts.header_1_font.cget('size') * 2, value_width=40, font=hfonts.header_1_font)
+        self.p_out_frame.grid(row=3, column=1, pady=(10, 10), sticky="nw")
 
         other_frame = ctk.CTkFrame(self)
-        other_frame.grid(row=1, column=2, pady=(0,5), sticky='nw')
+        other_frame.grid(row=1, column=2, pady=(0, 5), sticky='nw')
 
-        self.e_frame = ValueWithUnits(other_frame, label="E:  ", value="...", units="  %", label_unit_width=hfonts.header_1_font.cget('size') * 2, value_width=40, font=hfonts.header_1_font)
-        self.e_frame.grid(row=1, column=2, pady=(10,10), sticky="nw")
+        self.e_frame = ValueWithUnits(other_frame, label="E:  ", value="123.4", units="  %", label_unit_width=hfonts.header_1_font.cget('size') * 2, value_width=40, font=hfonts.header_1_font)
+        self.e_frame.grid(row=1, column=2, pady=(10, 10), sticky="nw")
         self.e_frame.set_data_format('{:2.2f}')
-        self.get_e, self.set_e = self.e_frame.get_set_factory()
-        self.m_frame = ValueWithUnits(other_frame, label="M:  ", value="...", units="  X", label_unit_width=hfonts.header_1_font.cget('size') * 2, value_width=40, font=hfonts.header_1_font)
-        self.m_frame.grid(row=2, column=2, pady=(10,10), sticky="nw")
-        self.get_m, self.set_m = self.m_frame.get_set_factory()
-        self.a_frame = ValueWithUnits(other_frame, label="A:  ", value="...", units="  %", label_unit_width=hfonts.header_1_font.cget('size') * 2, value_width=40, font=hfonts.header_1_font)
-        self.a_frame.grid(row=3, column=2, pady=(10,10), sticky="nw")
-        self.get_a, self.set_a = self.a_frame.get_set_factory()
+        self.m_frame = ValueWithUnits(other_frame, label="M:  ", value="123.4", units="  X", label_unit_width=hfonts.header_1_font.cget('size') * 2, value_width=40, font=hfonts.header_1_font)
+        self.m_frame.grid(row=2, column=2, pady=(10, 10), sticky="nw")
+        self.a_frame = ValueWithUnits(other_frame, label="A:  ", value="123.4", units="  %", label_unit_width=hfonts.header_1_font.cget('size') * 2, value_width=40, font=hfonts.header_1_font)
+        self.a_frame.grid(row=3, column=2, pady=(10, 10), sticky="nw")
         self.a_frame.set_data_format('{:2.2f}')
 
 
@@ -116,6 +102,7 @@ class TuneTab:
         self.v_in_offset_label.grid(row=row, column=0, sticky="nw")
         self.v_in_offset_frame = EntryWithButtons(root, num_type=float, emit_message=emit, font=hfonts.header_1_font, default=default)
         self.v_in_offset_frame.grid(row=row, column=1, sticky="ne")
+
 
 # class MessageBox(ctk.CTkFrame):
 #     def __init__(self, root):
@@ -131,10 +118,10 @@ class TuneTab:
 class SystemDetails(ctk.CTkFrame):
     def __init__(self, root):
         super().__init__(root, fg_color="transparent")
-        self.label = ctk.CTkLabel(self, text="System", font=hfonts.header_0_font).grid(row=0, column=0, columnspan=1, pady=(0,5), sticky="nwe")
+        self.label = ctk.CTkLabel(self, text="System", font=hfonts.header_0_font).grid(row=0, column=0, columnspan=1, pady=(0, 5), sticky="nwe")
 
         parameter_frame = ctk.CTkFrame(self)
-        parameter_frame.grid(row=1, column=0, pady=(0,5), sticky='nw')
+        parameter_frame.grid(row=1, column=0, pady=(0, 5), sticky='nw')
         self.cpu_temp_label = ctk.CTkLabel(parameter_frame, text='CPU Temp: ', font=hfonts.header_3_font)
         self.cpu_temp_label.grid(row=0, column=0, sticky="nw")
         self.cpu_temp_value = ctk.CTkLabel(parameter_frame, text='XX°C', font=hfonts.header_3_font)
@@ -149,10 +136,10 @@ class SystemDetails(ctk.CTkFrame):
 class SMPSParameters(ctk.CTkFrame):
     def __init__(self, root):
         super().__init__(root, fg_color="transparent")
-        self.label = ctk.CTkLabel(self, text="SMPS", font=hfonts.header_0_font).grid(row=0, column=0, columnspan=1, pady=(0,5), sticky="nwe")
+        self.label = ctk.CTkLabel(self, text="SMPS", font=hfonts.header_0_font).grid(row=0, column=0, columnspan=1, pady=(0, 5), sticky="nwe")
 
         parameter_frame = ctk.CTkFrame(self)
-        parameter_frame.grid(row=1, column=0, pady=(0,0), sticky='nw')
+        parameter_frame.grid(row=1, column=0, pady=(0, 0), sticky='nw')
 
         xpad = (10, 10)
         duty_frame = ctk.CTkFrame(parameter_frame, fg_color='transparent')
@@ -163,7 +150,7 @@ class SMPSParameters(ctk.CTkFrame):
         self.duty_frame.grid(row=0, column=1, sticky="e")
 
         parameter_frame = ctk.CTkFrame(parameter_frame, fg_color='transparent')
-        parameter_frame.grid(row=2, column=0, padx=xpad, pady=(0,5), sticky='nwe')
+        parameter_frame.grid(row=2, column=0, padx=xpad, pady=(0, 5), sticky='nwe')
         self.duty_label = ctk.CTkLabel(parameter_frame, text='Dead Band: ', font=hfonts.header_3_font)
         self.duty_label.grid(row=0, column=0, sticky="w")
         self.duty_frame = EntryWithButtons(parameter_frame, format='{}', num_type=int, emit_message='gui:dead_band_change', font=hfonts.header_1_font, default=24)
@@ -234,7 +221,7 @@ class App(ctk.CTk):
 
         # configure window
         self.title("CustomTkinter complex_example.py")
-        self.geometry(f"{1200}x{800}")
+        self.geometry(f"{1240}x{700}")
 
         # configure grid layout (4x4)
         self.grid_columnconfigure(1, weight=1)
@@ -266,35 +253,24 @@ class App(ctk.CTk):
         self.right_frame = ctk.CTkFrame(self, fg_color="transparent").grid(row=0, column=1, sticky='nsew')
 
         self.regulator_values = RegulatorValues(self.right_frame)
-        self.regulator_values.grid(row=0, column=1, padx=(10, 10), pady=(10, 0), sticky='nw')
-
-        # self.duty_label = ctk.CTkLabel(self.status_frame, text='Duty Cycle: ', font=hfonts.header_1_font)
-        # self.duty_label.grid(row=1, column=3, sticky="nw")
-        # self.duty_frame = EntryWithButtons(self.status_frame, emit_message='gui:duty_cycle_change', font=hfonts.header_1_font, default=0.00)
-        # self.duty_frame.grid(row=1, column=4, sticky="nw")
-        #
-        # self.dead_band_frame = EntryWithButtons(self.status_frame, format='{}', num_type=int, emit_message='gui:dead_band_change', font=hfonts.header_1_font, default=24)
-        # self.dead_band_frame.grid(row=2, column=4, sticky="nw")
+        self.regulator_values.grid(row=0, column=1, columnspan=2, padx=(10, 10), pady=(10, 0), sticky='nw')
 
         sys_details = SystemDetails(self.right_frame)
-        sys_details.grid(row=1, column=2, pady=(10,0), padx=(10,10), sticky='nwe')
+        sys_details.grid(row=1, column=2, pady=(10, 0), padx=(10, 10), sticky='nwe')
 
         smps_parameters = SMPSParameters(self.right_frame)
-        smps_parameters.grid(row=1, column=1, pady=(10,0), padx=(10,10), sticky='nwe')
+        smps_parameters.grid(row=1, column=1, pady=(10, 0), padx=(10, 10), sticky='nwe')
 
-        # self.message_box = MessageBox(self)
-        # self.message_box.grid(row=2, column=1, columnspan=3, pady=(10,0), sticky='nw')
-
-        self.message_box_label = ctk.CTkLabel(self.right_frame, text="Messages", font=hfonts.header_0_font).grid(row=2, column=1, columnspan=2, pady=(0,5), sticky="swe")
+        self.message_box_label = ctk.CTkLabel(self.right_frame, text="Messages", font=hfonts.header_0_font).grid(row=2, column=1, columnspan=3, pady=(0, 5), sticky="swe")
         self.message_box = ctk.CTkTextbox(self.right_frame, font=hfonts.regular_font)
-        self.message_box.grid(row=3, column=1, padx=(10,10), pady=(0,10), columnspan=2, sticky="we")
+        self.message_box.grid(row=3, column=1, padx=(10, 10), pady=(0, 10), columnspan=3, sticky="we")
 
         self.tune_tab_frame = ctk.CTkFrame(self.right_frame, fg_color='transparent')
-        self.tune_tab_frame.grid(row=0, column=2, pady=(10,0), sticky='nw')
+        self.tune_tab_frame.grid(row=0, column=3, pady=(10, 0), sticky='nw')
         self.tune_tab_label = ctk.CTkLabel(self.tune_tab_frame, text="Tune", font=hfonts.header_0_font)
         self.tune_tab_label.grid(row=0, column=0, sticky='nwe')
 
-        self.tune_tabs = ctk.CTkTabview(self.tune_tab_frame, width=250, height=180)
+        self.tune_tabs = ctk.CTkTabview(self.tune_tab_frame, width=255, height=180)
         self.tune_tabs.grid(row=1, column=0, padx=(20, 20), pady=(0, 0), sticky="nw")
         button_height = hfonts.header_2_font.cget('size') * 2
         button_width = self.tune_tabs.cget('width')
@@ -303,25 +279,35 @@ class App(ctk.CTk):
         self.v_in_tune_offset_row = TuneTab(self.tune_tabs.tab('V In'), label='V In Offset: ', emit='gui:v_in_offset_change', row=0, default=v_in_offset)
         self.v_in_tune_multiplier_row = TuneTab(self.tune_tabs.tab('V In'), label='V In Multiplier: ', emit='gui:v_in_multiplier_change', row=1, default=v_in_multiplier)
         self.v_in_tune_apply_button = ctk.CTkButton(self.tune_tabs.tab('V In'), text='Apply', font=hfonts.header_2_font, height=button_height, width=button_width)
-        self.v_in_tune_apply_button.grid(row=2, column=0, columnspan=2, pady=(10,0), sticky="nwe")
+        self.v_in_tune_apply_button.grid(row=2, column=0, columnspan=2, pady=(10, 0), sticky="nwe")
 
         self.tune_tabs.add("I In")
         self.i_in_tune_offset_row = TuneTab(self.tune_tabs.tab('I In'), label='I In Offset: ', emit='gui:i_in_offset_change', row=0, default=i_in_offset)
         self.i_in_tune_gain_row = TuneTab(self.tune_tabs.tab('I In'), label='I In Gain: ', emit='gui:i_in_gain_change', row=1, default=i_in_gain)
         self.i_in_tune_apply_button = ctk.CTkButton(self.tune_tabs.tab('I In'), text='Apply', font=hfonts.header_2_font, height=button_height, width=button_width)
-        self.i_in_tune_apply_button.grid(row=2, column=0, columnspan=2, pady=(10,0), sticky="nwe")
+        self.i_in_tune_apply_button.grid(row=2, column=0, columnspan=2, pady=(10, 0), sticky="nwe")
 
         self.tune_tabs.add("V Out")
         self.v_out_tune_offset_row = TuneTab(self.tune_tabs.tab('V Out'), label='V Out Offset: ', emit='gui:v_out_offset_change', row=0, default=v_out_offset)
         self.v_out_tune_multiplier_row = TuneTab(self.tune_tabs.tab('V Out'), label='V Out Multiplier: ', emit='gui:v_out_multiplier_change', row=1, default=v_out_multiplier)
         self.v_out_tune_apply_button = ctk.CTkButton(self.tune_tabs.tab('V Out'), text='Apply', font=hfonts.header_2_font, height=button_height, width=button_width)
-        self.v_out_tune_apply_button.grid(row=2, column=0, columnspan=2, pady=(10,0), sticky="nwe")
+        self.v_out_tune_apply_button.grid(row=2, column=0, columnspan=2, pady=(10, 0), sticky="nwe")
 
         self.tune_tabs.add("I Out")
         self.i_out_tune_offset_row = TuneTab(self.tune_tabs.tab('I Out'), label='I Out Offset: ', emit='gui:i_out_offset_change', row=0, default=i_out_offset)
         self.i_out_tune_gain_row = TuneTab(self.tune_tabs.tab('I Out'), label='I Out Gain: ', emit='gui:i_out_gain_change', row=1, default=i_out_gain)
         self.i_out_tune_apply_button = ctk.CTkButton(self.tune_tabs.tab('I Out'), text='Apply', font=hfonts.header_2_font, height=button_height, width=button_width)
-        self.i_out_tune_apply_button.grid(row=2, column=0, columnspan=2, pady=(10,0), sticky="nwe")
+        self.i_out_tune_apply_button.grid(row=2, column=0, columnspan=2, pady=(10, 0), sticky="nwe")
+
+        self.get_v_in, self.set_v_in = self.regulator_values.v_in_frame.get_set_factory()
+        self.get_i_in, self.set_i_in = self.regulator_values.i_in_frame.get_set_factory()
+        self.get_p_in, self.set_p_in = self.regulator_values.p_in_frame.get_set_factory()
+        self.get_v_out, self.set_v_out = self.regulator_values.v_out_frame.get_set_factory()
+        self.get_i_out, self.set_i_out = self.regulator_values.i_out_frame.get_set_factory()
+        self.get_p_out, self.set_p_out = self.regulator_values.p_out_frame.get_set_factory()
+        self.get_e, self.set_e = self.regulator_values.e_frame.get_set_factory()
+        self.get_m, self.set_m = self.regulator_values.m_frame.get_set_factory()
+        self.get_a, self.set_a = self.regulator_values.a_frame.get_set_factory()
 
     def open_input_dialog_event(self):
         dialog = ctk.CTkInputDialog(text="Type in a number:", title="CTkInputDialog")
@@ -343,15 +329,18 @@ def v_in_offset_change(value):
     global v_in_offset
     v_in_offset = value
 
+
 @bus.on('gui:v_in_multiplier_change')
 def v_in_multiplier_change(value):
     global v_in_multiplier
     v_in_multiplier = value
 
+
 @bus.on('gui:v_out_offset_change')
 def v_out_offset_change(value):
     global v_out_offset
     v_out_offset = value
+
 
 @bus.on('gui:v_out_multiplier_change')
 def v_out_multiplier_change(value):
@@ -405,7 +394,7 @@ def duty_cycle_change_handler(value: str):
 
 
 @bus.on('gui:dead_band_change')
-def daed_band_change_handler(value: str):
+def dead_band_change_handler(value: str):
     doc = {"SMPS": {"DeadBand": int(value)}}
     bus.emit('serial:transmit', doc)
 
@@ -414,26 +403,29 @@ def daed_band_change_handler(value: str):
 def updated_from_json(json_data: dict):
     # json_formatted_str = json.dumps(json_data, indent=2)
     # log.debug(json_formatted_str)
-    app.set_v_in(json_data["SMPS"]['In']['VVolts'] * v_in_multiplier)
-    app.set_i_in((json_data["SMPS"]['In']['IVolts'] - i_in_offset) * i_in_gain / 0.1)
-    # app.set_p_in(float(app.get_v_in()) * float(app.get_i_in()))
+    try:
+        app.set_v_in((json_data["SMPS"]['In']['VVolts']-v_in_offset) * v_in_multiplier)
+        app.set_i_in((json_data["SMPS"]['In']['IVolts'] - i_in_offset) * i_in_gain / 0.1)
+        app.set_p_in(float(app.get_v_in()) * float(app.get_i_in()))
 
-    app.set_v_out(json_data["SMPS"]['Out']['VVolts'] * v_out_multiplier)
-    app.set_i_out((json_data["SMPS"]['Out']['IVolts'] - i_out_offset) * i_out_gain / 0.1)
+        app.set_v_out((json_data["SMPS"]['Out']['VVolts']-v_out_offset) * v_out_multiplier)
+        app.set_i_out((json_data["SMPS"]['Out']['IVolts'] - i_out_offset) * i_out_gain / 0.1)
+        app.set_p_out(float(app.get_v_out()) * float(app.get_i_out()))
 
-    if 'System' in json_data and 'Message' in json_data['System']:
-        app.message_box.insert(ctk.END, json_data['System']['Message'])
-        app.message_box.see(ctk.END)
-    # app.set_p_out(float(app.get_v_out()) * float(app.get_i_out()))
-    #
-    # app.set_m(float(app.get_v_out()) / float(app.get_v_in()))
-    # app.set_e(float(app.get_p_out()) / float(app.get_p_in()) * 100)
+        if 'System' in json_data and 'Message' in json_data['System']:
+            app.message_box.insert(ctk.END, json_data['System']['Message'])
+            app.message_box.see(ctk.END)
+        #
+        # app.set_m(float(app.get_v_out()) / float(app.get_v_in()))
+        # app.set_e(float(app.get_p_out()) / float(app.get_p_in()) * 100)
 
-    # print(f"A Level: {json_data['SMPS']['ALevel']}")
-    # print(f"B Level: {json_data['SMPS']['BLevel']}")
-    # print(f"Duty: {json_data['SMPS']['InDuty']}")
-    # print(f"Deadband: {json_data['SMPS']['InDeadBand']}")
-    # print(f"Top: {json_data['SMPS']['Top']}")
+        # print(f"A Level: {json_data['SMPS']['ALevel']}")
+        # print(f"B Level: {json_data['SMPS']['BLevel']}")
+        # print(f"Duty: {json_data['SMPS']['InDuty']}")
+        # print(f"Deadband: {json_data['SMPS']['InDeadBand']}")
+        # print(f"Top: {json_data['SMPS']['Top']}")
+    except:
+        pass
 
 
 async def get_com_ports():
