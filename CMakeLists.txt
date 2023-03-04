@@ -28,7 +28,7 @@ if (TARGET tinyusb_device)
     pico_enable_stdio_uart(FirstBoost 0)
 
     # pull in common dependencies
-    target_link_libraries(FirstBoost pico_stdlib)
+    target_link_libraries(FirstBoost pico_stdlib pico_multicore)
 
     # pull in common dependencies and additional pwm hardware support
     target_link_libraries(FirstBoost pico_stdlib hardware_pwm hardware_adc)

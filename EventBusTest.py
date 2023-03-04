@@ -143,18 +143,44 @@ class SMPSParameters(ctk.CTkFrame):
 
         xpad = (10, 10)
         duty_frame = ctk.CTkFrame(parameter_frame, fg_color='transparent')
-        duty_frame.grid(row=1, column=0, padx=xpad, pady=(10, 0), sticky='nwe')
+        duty_frame.grid(row=1, column=0, padx=xpad, pady=(10, 10), sticky='nwe')
         self.duty_label = ctk.CTkLabel(duty_frame, text='Duty Cycle: ', font=hfonts.header_3_font)
         self.duty_label.grid(row=0, column=0, sticky="w")
         self.duty_frame = EntryWithButtons(duty_frame, emit_message='gui:duty_cycle_change', font=hfonts.header_1_font, default=0.00)
         self.duty_frame.grid(row=0, column=1, sticky="e")
 
-        parameter_frame = ctk.CTkFrame(parameter_frame, fg_color='transparent')
-        parameter_frame.grid(row=2, column=0, padx=xpad, pady=(0, 5), sticky='nwe')
-        self.duty_label = ctk.CTkLabel(parameter_frame, text='Dead Band: ', font=hfonts.header_3_font)
-        self.duty_label.grid(row=0, column=0, sticky="w")
-        self.duty_frame = EntryWithButtons(parameter_frame, format='{}', num_type=int, emit_message='gui:dead_band_change', font=hfonts.header_1_font, default=24)
-        self.duty_frame.grid(row=0, column=1, sticky="e")
+        self.duty_label = ctk.CTkLabel(duty_frame, text='Dead Band: ', font=hfonts.header_3_font)
+        self.duty_label.grid(row=1, column=0, sticky="w")
+        self.duty_frame = EntryWithButtons(duty_frame, format='{}', num_type=int, emit_message='gui:dead_band_change', font=hfonts.header_1_font, default=24)
+        self.duty_frame.grid(row=1, column=1, sticky="e")
+
+        # dead_band_frame = ctk.CTkFrame(parameter_frame, fg_color='transparent')
+        # dead_band_frame.grid(row=2, column=0, padx=xpad, pady=(0, 0), sticky='nwe')
+        # self.duty_label = ctk.CTkLabel(dead_band_frame, text='Dead Band: ', font=hfonts.header_3_font)
+        # self.duty_label.grid(row=0, column=0, sticky="w")
+        # self.duty_frame = EntryWithButtons(dead_band_frame, format='{}', num_type=int, emit_message='gui:dead_band_change', font=hfonts.header_1_font, default=24)
+        # self.duty_frame.grid(row=0, column=1, sticky="e")
+
+        # enable_frame = ctk.CTkFrame(parameter_frame, fg_color='transparent')
+        # enable_frame.grid(row=1, column=1, padx=(0, 10), pady=(10, 0), sticky='nwe')
+        # duty_frame.grid_columnconfigure(0, pad=10)
+
+        self.enable_label = ctk.CTkLabel(duty_frame, text='Enable: ', font=hfonts.header_3_font)
+        self.enable_label.grid(row=0, column=2, sticky="w")
+        self.enable_switch = ctk.CTkSwitch(duty_frame, onvalue=True, text='', offvalue=False, command=lambda: bus.emit('gui:enable_switch_change', self))
+        self.enable_switch.grid(row=0, column=3, sticky="e")
+
+        self.pi_enable_label = ctk.CTkLabel(duty_frame, text='PI Loop: ', font=hfonts.header_3_font)
+        self.pi_enable_label.grid(row=1, column=2, sticky="w")
+        self.pi_enable_switch = ctk.CTkSwitch(duty_frame, onvalue=True, text='', offvalue=False, command=lambda: bus.emit('gui:pi_enable_switch_change', self))
+        self.pi_enable_switch.grid(row=1, column=3, sticky="e")
+
+        # pi_enable_frame = ctk.CTkFrame(parameter_frame, fg_color='transparent')
+        # pi_enable_frame.grid(row=2, column=1, padx=(0, 10), pady=(0, 0), sticky='nwe')
+        # self.pi_enable_label = ctk.CTkLabel(pi_enable_frame, text='PI Loop: ', font=hfonts.header_3_font)
+        # self.pi_enable_label.grid(row=1, column=0, sticky="w")
+        # self.pi_enable_switch = ctk.CTkSwitch(pi_enable_frame, onvalue=True, text='', offvalue=False, command=lambda: bus.emit('gui:pi_enable_switch_change', self))
+        # self.pi_enable_switch.grid(row=1, column=1, sticky="e")
 
 
 class EntryWithButtons(ctk.CTkFrame):
