@@ -8,6 +8,7 @@
 #include <cstdio>
 #include <span>
 #include <string_view>
+#include "pico/stdlib.h"
 
 /**
  * @brief Reads a line from the USB serial port without blocking.
