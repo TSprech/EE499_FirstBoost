@@ -14,6 +14,6 @@
   },
   "System": {
     "Message": "Insert text here",
-    "Temp": 5.00
+    "TempC": 5.00
   }
 }

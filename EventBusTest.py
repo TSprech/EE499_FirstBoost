@@ -167,12 +167,12 @@ class SMPSParameters(ctk.CTkFrame):
 
         self.enable_label = ctk.CTkLabel(duty_frame, text='Enable: ', font=hfonts.header_3_font)
         self.enable_label.grid(row=0, column=2, sticky="w")
-        self.enable_switch = ctk.CTkSwitch(duty_frame, onvalue=True, text='', offvalue=False, command=lambda: bus.emit('gui:enable_switch_change', self))
+        self.enable_switch = ctk.CTkSwitch(duty_frame, onvalue=True, text='', offvalue=False, command=lambda: bus.emit('gui:enable_switch_change', self.enable_switch.get()))
         self.enable_switch.grid(row=0, column=3, sticky="e")
 
         self.pi_enable_label = ctk.CTkLabel(duty_frame, text='PI Loop: ', font=hfonts.header_3_font)
         self.pi_enable_label.grid(row=1, column=2, sticky="w")
-        self.pi_enable_switch = ctk.CTkSwitch(duty_frame, onvalue=True, text='', offvalue=False, command=lambda: bus.emit('gui:pi_enable_switch_change', self))
+        self.pi_enable_switch = ctk.CTkSwitch(duty_frame, onvalue=True, text='', offvalue=False, command=lambda: bus.emit('gui:pi_enable_switch_change', self.pi_enable_switch.get()))
         self.pi_enable_switch.grid(row=1, column=3, sticky="e")
 
         # pi_enable_frame = ctk.CTkFrame(parameter_frame, fg_color='transparent')
@@ -410,6 +410,18 @@ log = logging.getLogger("rich")
 @bus.on('gui:led_switch_change')
 def led_switch_handler(gui: App):
     doc = {"Control": {"LED": gui.led_switch.get()}}
+    bus.emit('serial:transmit', doc)
+
+
+@bus.on('gui:enable_switch_change')
+def enable_switch_handler(state: bool):
+    doc = {"SMPS": {"Enable": state}}
+    bus.emit('serial:transmit', doc)
+
+
+@bus.on('gui:pi_enable_switch_change')
+def pi_enable_switch_handler(state: bool):
+    doc = {"SMPS": {"PIEnable": state}}
     bus.emit('serial:transmit', doc)
 
 
