@@ -290,8 +290,14 @@ auto FIFO_Pop(MessageTypes mtype) {
 }
 
 #include "pico/mutex.h"
+#include "pico/util/queue.h"
 
 mutex_t* adc_mutex;
+
+queue_t v_in_samples;
+queue_t i_in_samples;
+queue_t v_out_samples;
+queue_t i_out_samples;
 
 bool BlinkLED(repeating_timer_t *rt) {
   static auto state = true;
@@ -304,18 +310,39 @@ bool BlinkLED(repeating_timer_t *rt) {
     gpio_put(MONITOR_PIN, false);
   }
   state = !state;
-  return true;
+//
+//  uint32_t sum = 0;
+//  while (!queue_is_empty(&v_in_samples)) {
+//    uint16_t current_data
+//    queue_try_remove()
+//  }
+
+
+  return true; // Return true to repeat the timer
 }
 
 void main1() {
   constexpr size_t feedback_average_number = 5;
   std::array<uint16_t, feedback_average_number> v_in_feedback{};
 
+  gpio_init(MONITOR_PIN);
+  gpio_set_dir(MONITOR_PIN, GPIO_OUT);
+
   repeating_timer_t timer;
 
-  if (!add_repeating_timer_us(1000000, BlinkLED, nullptr, &timer)){
+  auto rate = 5_kHz; // Whatever the PI loop call rate will be
+  units::time::microsecond_t period = 1 / rate; // Convert the Hz to period
+
+  if (!add_repeating_timer_us(period.to<uint32_t>(), BlinkLED, nullptr, &timer)){
     printf("Failed to create timer");
   }
+
+  constexpr size_t queue_length = 200;
+
+  queue_init(&v_in_samples, sizeof(uint16_t), queue_length);
+  queue_init(&i_in_samples, sizeof(uint16_t), queue_length);
+  queue_init(&v_out_samples, sizeof(uint16_t), queue_length);
+  queue_init(&i_out_samples, sizeof(uint16_t), queue_length);
 
   while (true) {
     // Calculate error (ref - actual)
@@ -325,11 +352,17 @@ void main1() {
     // Update the integrator (vkp and vki are constants)
     // Else case prevents duty mismatch when enabling
 
-    //    for (auto& voltage : v_in_feedback) {
-    //      voltage = ADCRaw(ADC_Channels::voltage_in);
-    //    }
-    //
-    //    auto v_in_feedback_average = RawToVoltage(std::accumulate(v_in_feedback.begin(), v_in_feedback.end(), 0) / v_in_feedback.size());
+//    auto v_in_raw = ADCRaw(ADC_Channels::voltage_in);
+//    queue_try_add(&v_in_samples, &v_in_raw);
+//
+//    auto i_in_raw = ADCRaw(ADC_Channels::current_in);
+//    queue_try_add(&i_in_samples, &i_in_raw);
+//
+//    auto v_out_raw = ADCRaw(ADC_Channels::voltage_out);
+//    queue_try_add(&v_out_samples, &v_out_raw);
+//
+//    auto i_out_raw = ADCRaw(ADC_Channels::current_out);
+//    queue_try_add(&i_out_samples, &i_out_raw);
   }
 }
 
@@ -353,7 +386,7 @@ int main() {
   adc_gpio_init(29);
   adc_set_temp_sensor_enabled(true);
 
-//  multicore_launch_core1(main1);
+  multicore_launch_core1(main1);
 
 //  pwm_manager.Initialize();
 
