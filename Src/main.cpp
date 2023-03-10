@@ -404,12 +404,12 @@ bool FeedbackLoop(repeating_timer_t* rt) {
   static ITune i_in_tune = {
       .shunt = 100_mOhm,
       .offset = 1.65_V,
-      .gain = 2};
+      .gain = 1};
 
   static ITune i_out_tune = {
       .shunt = 100_mOhm,
       .offset = 1.65_V,
-      .gain = 2};
+      .gain = 1};
 
   static SMPSParameters smps_parameters = {
       .v_out_set_point = 0_V,
@@ -461,27 +461,30 @@ bool FeedbackLoop(repeating_timer_t* rt) {
   auto v_out_average = AverageVoltageFromQueue(v_out_samples_queue, v_out_tune.offset.value(), v_out_tune.multiplier.value());
   auto i_out_average = AverageCurrentFromQueue(i_out_samples_queue, i_out_tune.shunt.value(), i_out_tune.offset.value(), i_out_tune.gain.value());
 
-  constexpr float duty_max = 0.9F;
-  constexpr float duty_min = 0.2F;
-  constexpr float k_p = 1.0F;
-  constexpr float k_i = 1.0F;
-  static float duty = 0.0F;
+  constexpr float duty_max = 90.0F;
+  constexpr float duty_min = 20.0F;
+  constexpr float k_p = 0.000001F;
+  constexpr float k_i = 0.000001F;
   static float duty_integrated = 0.0F;
 
   if (smps_parameters.enable.value() && smps_parameters.pi_loop_enable.value()) {
     auto error = smps_parameters.v_out_set_point.value() - v_out_average;
-
-    float duty_out = k_p * error.to<float>() + duty_integrated;
-    duty_out = std::clamp(duty_out, duty_min, duty_max);
-
-    duty_integrated = k_i * error.to<float>() * period.to<float>();
+//    auto error = smps_parameters.v_out_set_point.value() - CorrectVoltage(ADCVoltage(ADC_Channels::voltage_out), v_in_tune.offset.value(), v_in_tune.multiplier.value());
+//
+    float duty = k_p * error.to<float>() + duty_integrated;
+    duty = std::clamp(duty, duty_min, duty_max);
+//
+    duty_integrated += k_i * error.to<float>() * period.to<float>();
     duty_integrated = std::clamp(duty_integrated, duty_min, duty_max);
 
-    duty = duty_out;
+    static auto last_duty = duty;
     pwm_manager.SMPSDuty(duty);
-    FMTDebug("Setting PI duty cycle: {}%\n", duty);
+    if (std::abs(duty - last_duty) > 2) {
+      FMTDebug("Setting PI duty cycle: {}%\n", duty);
+      last_duty = duty;
+    }
   } else {
-    duty_integrated = duty;
+    duty_integrated = smps_parameters.user_duty.value();
   }
 
   if (smps_parameters.enable.value() && !smps_parameters.pi_loop_enable.value()) {
@@ -491,7 +494,8 @@ bool FeedbackLoop(repeating_timer_t* rt) {
       FMTDebug("Setting user duty cycle: {}%\n", smps_parameters.user_duty.value());
       last_duty = smps_parameters.user_duty.value();
     }
-  } else {
+  }
+  if (!smps_parameters.enable.value() && !smps_parameters.pi_loop_enable.value()) {
     pwm_manager.SMPSDuty(0);
   }
 
@@ -690,36 +694,23 @@ int main() {
     }
     j.clear();
 
-    //    j["SMPS"]["In"]["Volts"] = ADCVoltage(ADC_Channels::voltage_in);
-    //    j["SMPS"]["Out"]["Volts"] = ADCVoltage(ADC_Channels::voltage_out);
-    //    j["SMPS"]["In"]["Amps"] = ADCCurrent(ADC_Channels::current_in, 100, i_in_offset, i_in_gain);
-    //    j["SMPS"]["Out"]["Amps"] = ADCCurrent(ADC_Channels::current_out, 100, i_out_offset, i_out_gain);
-
-//    for (size_t index = 0; index < averaging_array_size; ++index) {
-//      mutex_enter_blocking(adc_mutex);
-//      v_in_readings[index] = ADCRaw(ADC_Channels::voltage_in);
-//      v_out_readings[index] = ADCRaw(ADC_Channels::voltage_out);
-//      i_in_readings[index] = ADCRaw(ADC_Channels::current_in);
-//      i_out_readings[index] = ADCRaw(ADC_Channels::current_out);
-//      mutex_exit(adc_mutex);
-//      sleep_us(1);
-//    }
-//
-//    auto v_in_average = RawToVoltage(std::accumulate(v_in_readings.begin(), v_in_readings.end(), 0) / averaging_array_size);
-//    auto v_out_average = RawToVoltage(std::accumulate(v_out_readings.begin(), v_out_readings.end(), 0) / averaging_array_size);
-//    auto i_in_shunt_average = RawToVoltage(std::accumulate(i_in_readings.begin(), i_in_readings.end(), 0) / averaging_array_size);
-//    auto i_out_shunt_average = RawToVoltage(std::accumulate(i_out_readings.begin(), i_out_readings.end(), 0) / averaging_array_size);
-
-    //    auto raw = 0.0F;
-    //    auto filtered = 0.0F;
-    //    filtered = 0.99*filtered + 0.01*raw;
-
     SensorData sensor_data{};
     while (queue_try_remove(&sensor_data_queue, &sensor_data)) {
       j["SMPS"]["In"]["Volts"] = sensor_data.v_in.to<float>();
       j["SMPS"]["In"]["Amps"] = sensor_data.i_in.to<float>();
       j["SMPS"]["Out"]["Volts"] = sensor_data.v_out.to<float>();
       j["SMPS"]["Out"]["Amps"] = sensor_data.i_out.to<float>();
+      std::string buf{};
+      fmt::format_to(std::back_inserter(buf), "v_in_samples_queue: {}\n", queue_get_level(&v_in_samples_queue));
+      fmt::format_to(std::back_inserter(buf), "i_in_samples_queue: {}\n", queue_get_level(&i_in_samples_queue));
+      fmt::format_to(std::back_inserter(buf), "v_out_samples_queue: {}\n", queue_get_level(&v_out_samples_queue));
+      fmt::format_to(std::back_inserter(buf), "i_out_samples_queue: {}\n", queue_get_level(&i_out_samples_queue));
+      fmt::format_to(std::back_inserter(buf), "tune_values_queue: {}\n", queue_get_level(&tune_values_queue));
+      fmt::format_to(std::back_inserter(buf), "smps_parameters_queue: {}\n", queue_get_level(&smps_parameters_queue));
+      fmt::format_to(std::back_inserter(buf), "sensor_data_queue: {}\n", queue_get_level(&sensor_data_queue));
+
+      j["System"]["Message"] = buf;
+
       std::string json_str = j.dump();
       puts(json_str.data());
     }
@@ -727,6 +718,6 @@ int main() {
 //    j["System"]["TempC"] = CPUTemperature().to<float>();
     j.clear();
 
-    sleep_ms(10);
+    sleep_ms(50);
   }
 }

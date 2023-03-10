@@ -154,6 +154,11 @@ class SMPSParameters(ctk.CTkFrame):
         self.duty_frame = EntryWithButtons(duty_frame, format='{}', num_type=int, emit_message='gui:dead_band_change', font=hfonts.header_1_font, default=24)
         self.duty_frame.grid(row=1, column=1, sticky="e")
 
+        self.v_set_point_label = ctk.CTkLabel(duty_frame, text='V Set: ', font=hfonts.header_3_font)
+        self.v_set_point_label.grid(row=2, column=0, sticky="w")
+        self.v_set_point_frame = EntryWithButtons(duty_frame, format='{}', num_type=float, emit_message='gui:v_set_point_change', font=hfonts.header_1_font, default=7, min_value=0, max_value=30, step=1)
+        self.v_set_point_frame.grid(row=2, column=1, sticky="e")
+
         # dead_band_frame = ctk.CTkFrame(parameter_frame, fg_color='transparent')
         # dead_band_frame.grid(row=2, column=0, padx=xpad, pady=(0, 0), sticky='nwe')
         # self.duty_label = ctk.CTkLabel(dead_band_frame, text='Dead Band: ', font=hfonts.header_3_font)
@@ -443,6 +448,12 @@ def led_switch_handler(gui: App):
 @bus.on('gui:enable_switch_change')
 def enable_switch_handler(state: bool):
     doc = {"SMPS": {"Enable": state}}
+    bus.emit('serial:transmit', doc)
+
+
+@bus.on('gui:v_set_point_change')
+def v_set_point_change(value: float):
+    doc = {"SMPS": {"SetPoint": value}}
     bus.emit('serial:transmit', doc)
 
 
