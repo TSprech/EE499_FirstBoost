@@ -267,6 +267,7 @@ auto get_cycle_count() -> uint32_t {
 //auto FIFO_Pop(MessageTypes mtype) {
 //}
 
+#include "fmt/format.h"
 #include "pico/mutex.h"
 #include "pico/util/queue.h"
 
@@ -449,12 +450,34 @@ bool BlinkLED(repeating_timer_t* rt) {
   return true;  // Return true to repeat the timer
 }
 
+template <typename... T>
+auto FMTDebug(fmt::format_string<T...> fmt, T&&... args) {
+  fmt::memory_buffer buf;
+  auto end = vformat_to(std::back_inserter(buf), fmt, fmt::make_format_args(args...));
+
+  if (get_core_num() == 0) { // Check which core called for the debug and output to the appropriate UART
+    //  for (auto* data = buf.begin(); data != end; ++data) {
+    for (auto i = 0; i < buf.size(); ++i) {
+      uart_putc(uart0, buf[i]);
+    }
+  } else {
+    for (auto i = 0; i < buf.size(); ++i) {
+      uart_putc(uart1, buf[i]);
+    }
+  }
+}
+
 void main1() {
   constexpr size_t feedback_average_number = 5;
   std::array<uint16_t, feedback_average_number> v_in_feedback{};
 
   gpio_init(MONITOR_PIN);
   gpio_set_dir(MONITOR_PIN, GPIO_OUT);
+
+  uart_init(uart1, 115200);
+
+  gpio_set_function(4, GPIO_FUNC_UART);
+  gpio_set_function(5, GPIO_FUNC_UART);
 
   repeating_timer_t timer;
 
@@ -470,6 +493,9 @@ void main1() {
   queue_init(&i_out_samples_queue, sizeof(uint16_t), queue_length);
 
   while (true) {
+    FMTDebug("This is a test string: {} | {}\n", -2000, 20.8F);
+    sleep_ms(1000);
+
     // Calculate error (ref - actual)
     // d is duty cycle
     // Duty cycle limits (2.5% - 90%)
@@ -502,11 +528,6 @@ int main() {
   //    sleep_ms(1000);
   //  }
 
-  uart_init(uart1, 115200);
-
-  gpio_set_function(4, GPIO_FUNC_UART);
-  gpio_set_function(5, GPIO_FUNC_UART);
-
   queue_init(&tune_values_queue, sizeof(TuneValues), 5);
   queue_init(&smps_parameters_queue, sizeof(SMPSParameters), 5);
 
@@ -538,14 +559,6 @@ int main() {
 
   std::array<char, 128> fmt_buf{};
   while (true) {
-    fmt::format_to(fmt_buf.begin(), "This is a test: {} {}", 9000, 3.14F);
-
-    char* data = fmt_buf.begin();
-    while(*data != '\0') {
-      uart_putc(uart1, *data++);
-    }
-    sleep_ms(1000);
-
     //    auto cycle_start = get_cycle_count();
     //    sleep_us(1);
     //    auto cycle_end = get_cycle_count();
