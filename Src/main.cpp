@@ -463,8 +463,8 @@ bool FeedbackLoop(repeating_timer_t* rt) {
 
   constexpr float duty_max = 90.0F;
   constexpr float duty_min = 20.0F;
-  constexpr float k_p = 0.000001F;
-  constexpr float k_i = 0.000001F;
+  constexpr float k_p = 0.1F;
+  constexpr float k_i = 20.0F;
   static float duty_integrated = 0.0F;
 
   if (smps_parameters.enable.value() && smps_parameters.pi_loop_enable.value()) {
