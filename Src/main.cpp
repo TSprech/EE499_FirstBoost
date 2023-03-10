@@ -280,6 +280,7 @@ queue_t i_out_samples_queue;
 
 queue_t tune_values_queue;
 queue_t smps_parameters_queue;
+queue_t sensor_data_queue;
 
 #include <optional>
 
@@ -308,6 +309,23 @@ struct SMPSParameters {
   std::optional<bool> pi_loop_enable;
 };
 
+template <typename... T>
+auto FMTDebug(fmt::format_string<T...> fmt, T&&... args) {
+  fmt::memory_buffer buf;
+  auto end = vformat_to(std::back_inserter(buf), fmt, fmt::make_format_args(args...));
+
+//  if (get_core_num() == 0) {  // Check which core called for the debug and output to the appropriate UART
+//    //  for (auto* data = buf.begin(); data != end; ++data) {
+//    for (auto i = 0; i < buf.size(); ++i) {
+//      uart_putc(uart0, buf[i]);
+//    }
+//  } else {
+    for (auto i = 0; i < buf.size(); ++i) {
+      uart_putc(uart1, buf[i]);
+    }
+//  }
+}
+
 auto AverageFromQueue(queue_t& queue) {
   uint32_t sum = 0;
   size_t number_of_data_points = 0;
@@ -331,12 +349,14 @@ auto AverageCurrentFromQueue(queue_t& queue, units::impedance::ohm_t shunt, unit
   return RawToCurrent(AverageFromQueue(queue), shunt, offset, gain);
 }
 
-#define EXTRACT_FUNCTION(func_name, struct_type, variable_type, member_name)        \
-  auto func_name(std::optional<struct_type> tune_struct, variable_type& variable) { \
-    if (tune_struct && tune_struct.value().member_name) {                           \
-      variable = tune_struct.value().member_name.value();                           \
-    }                                                                               \
-  }                                                                                 \
+#define EXTRACT_FUNCTION(func_name, struct_type, variable_type, member_name)              \
+  auto func_name(std::optional<struct_type> tune_struct, variable_type& variable)->bool { \
+    if (tune_struct && tune_struct.value().member_name) {                                 \
+      variable = tune_struct.value().member_name.value();                                 \
+      return true;                                                                        \
+    }                                                                                     \
+    return false;                                                                         \
+  }                                                                                       \
   static_assert(true)
 
 EXTRACT_FUNCTION(ExtractOffset, VTune, std::optional<units::voltage::volt_t>, offset);
@@ -350,10 +370,17 @@ EXTRACT_FUNCTION(ExtractUserDuty, SMPSParameters, std::optional<float>, user_dut
 EXTRACT_FUNCTION(ExtractEnable, SMPSParameters, std::optional<bool>, enable);
 EXTRACT_FUNCTION(ExtractPILoopEnable, SMPSParameters, std::optional<bool>, pi_loop_enable);
 
-constexpr auto rate = 5_kHz;                        // Whatever the PI loop call rate will be
+constexpr auto rate = 100_Hz;                        // Whatever the PI loop call rate will be
 constexpr units::time::second_t period = 1 / rate;  // Convert the Hz to period
 
-bool BlinkLED(repeating_timer_t* rt) {
+struct SensorData {
+  units::voltage::volt_t v_in;
+  units::current::ampere_t i_in;
+  units::voltage::volt_t v_out;
+  units::current::ampere_t i_out;
+};
+
+bool FeedbackLoop(repeating_timer_t* rt) {
   /*  static auto state = true;
   if (state) {
     gpio_put(LED_PIN, true);
@@ -392,27 +419,41 @@ bool BlinkLED(repeating_timer_t* rt) {
 
   TuneValues tune{};
   while (queue_try_remove(&tune_values_queue, &tune)) {
-    ExtractOffset(tune.v_in_tune, v_in_tune.offset);
-    ExtractMultiplier(tune.v_in_tune, v_in_tune.multiplier);
+    if (ExtractOffset(tune.v_in_tune, v_in_tune.offset))
+      FMTDebug("V in offset changed: {}V\n", v_in_tune.offset.value().to<float>());
+    if (ExtractMultiplier(tune.v_in_tune, v_in_tune.multiplier))
+      FMTDebug("V in multiplier changed: {}\n", v_in_tune.multiplier.value());
 
-    ExtractOffset(tune.v_out_tune, v_out_tune.offset);
-    ExtractMultiplier(tune.v_out_tune, v_out_tune.multiplier);
+    if (ExtractOffset(tune.v_out_tune, v_out_tune.offset))
+      FMTDebug("V out offset changed: {}V\n", v_out_tune.offset.value().to<float>());
+    if (ExtractMultiplier(tune.v_out_tune, v_out_tune.multiplier))
+      FMTDebug("V out multiplier changed: {}\n", v_out_tune.multiplier.value());
 
-    ExtractShunt(tune.i_in_tune, i_in_tune.shunt);
-    ExtractOffset(tune.i_in_tune, i_in_tune.offset);
-    ExtractGain(tune.i_in_tune, i_in_tune.gain);
+    if (ExtractShunt(tune.i_in_tune, i_in_tune.shunt))
+      FMTDebug("I in shunt changed: {}Ω\n", i_in_tune.shunt.value().to<float>());
+    if (ExtractOffset(tune.i_in_tune, i_in_tune.offset))
+      FMTDebug("I in offset changed: {}V\n", i_in_tune.offset.value().to<float>());
+    if (ExtractGain(tune.i_in_tune, i_in_tune.gain))
+      FMTDebug("I in gain changed: {}\n", i_in_tune.gain.value());
 
-    ExtractShunt(tune.i_out_tune, i_out_tune.shunt);
-    ExtractOffset(tune.i_out_tune, i_out_tune.offset);
-    ExtractGain(tune.i_out_tune, i_out_tune.gain);
+    if (ExtractShunt(tune.i_out_tune, i_out_tune.shunt))
+      FMTDebug("I out shunt changed: {}Ω\n", i_out_tune.shunt.value().to<float>());
+    if (ExtractOffset(tune.i_out_tune, i_out_tune.offset))
+      FMTDebug("I out offset changed: {}V\n", i_out_tune.offset.value().to<float>());
+    if (ExtractGain(tune.i_out_tune, i_out_tune.gain))
+      FMTDebug("I out gain changed: {}\n", i_out_tune.gain.value());
   }
 
   SMPSParameters parameters{};
   while (queue_try_remove(&smps_parameters_queue, &parameters)) {
-    ExtractVOutSetPoint(parameters, smps_parameters.v_out_set_point);
-    ExtractUserDuty(parameters, smps_parameters.user_duty);
-    ExtractEnable(parameters, smps_parameters.enable);
-    ExtractPILoopEnable(parameters, smps_parameters.pi_loop_enable);
+    if (ExtractVOutSetPoint(parameters, smps_parameters.v_out_set_point))
+      FMTDebug("V out set point changed: {}V\n", smps_parameters.v_out_set_point.value().to<float>());
+    if (ExtractUserDuty(parameters, smps_parameters.user_duty))
+      FMTDebug("User duty cycle changed: {}%\n", smps_parameters.user_duty.value());
+    if (ExtractEnable(parameters, smps_parameters.enable))
+      FMTDebug("SMPS is now {}\n", (smps_parameters.enable.value() ? "enabled" : "disabled"));
+    if (ExtractPILoopEnable(parameters, smps_parameters.pi_loop_enable))
+      FMTDebug("PI Loop is now {}\n", (smps_parameters.pi_loop_enable.value() ? "enabled" : "disabled"));
   }
 
   auto v_in_average = AverageVoltageFromQueue(v_in_samples_queue, v_in_tune.offset.value(), v_in_tune.multiplier.value());
@@ -427,7 +468,7 @@ bool BlinkLED(repeating_timer_t* rt) {
   static float duty = 0.0F;
   static float duty_integrated = 0.0F;
 
-  if (smps_parameters.enable && smps_parameters.pi_loop_enable) {
+  if (smps_parameters.enable.value() && smps_parameters.pi_loop_enable.value()) {
     auto error = smps_parameters.v_out_set_point.value() - v_out_average;
 
     float duty_out = k_p * error.to<float>() + duty_integrated;
@@ -437,34 +478,33 @@ bool BlinkLED(repeating_timer_t* rt) {
     duty_integrated = std::clamp(duty_integrated, duty_min, duty_max);
 
     duty = duty_out;
+    pwm_manager.SMPSDuty(duty);
+    FMTDebug("Setting PI duty cycle: {}%\n", duty);
   } else {
     duty_integrated = duty;
   }
 
-  if (smps_parameters.enable) {
-    pwm_manager.SMPSDuty(duty);
+  if (smps_parameters.enable.value() && !smps_parameters.pi_loop_enable.value()) {
+    static auto last_duty = smps_parameters.user_duty.value();
+    pwm_manager.SMPSDuty(smps_parameters.user_duty.value());
+    if (smps_parameters.user_duty.value() != last_duty) {
+      FMTDebug("Setting user duty cycle: {}%\n", smps_parameters.user_duty.value());
+      last_duty = smps_parameters.user_duty.value();
+    }
   } else {
     pwm_manager.SMPSDuty(0);
   }
 
+  SensorData sensor_data {
+      .v_in = v_in_average,
+      .i_in = i_in_average,
+      .v_out = v_out_average,
+      .i_out = i_out_average
+  };
+
+  queue_try_add(&sensor_data_queue, &sensor_data);
+
   return true;  // Return true to repeat the timer
-}
-
-template <typename... T>
-auto FMTDebug(fmt::format_string<T...> fmt, T&&... args) {
-  fmt::memory_buffer buf;
-  auto end = vformat_to(std::back_inserter(buf), fmt, fmt::make_format_args(args...));
-
-  if (get_core_num() == 0) { // Check which core called for the debug and output to the appropriate UART
-    //  for (auto* data = buf.begin(); data != end; ++data) {
-    for (auto i = 0; i < buf.size(); ++i) {
-      uart_putc(uart0, buf[i]);
-    }
-  } else {
-    for (auto i = 0; i < buf.size(); ++i) {
-      uart_putc(uart1, buf[i]);
-    }
-  }
 }
 
 void main1() {
@@ -481,7 +521,7 @@ void main1() {
 
   repeating_timer_t timer;
 
-  if (!add_repeating_timer_us(units::time::microsecond_t{period}.to<uint32_t>(), BlinkLED, nullptr, &timer)) {
+  if (!add_repeating_timer_us(units::time::microsecond_t{period}.to<uint32_t>(), FeedbackLoop, nullptr, &timer)) {
     printf("Failed to create timer");
   }
 
@@ -492,10 +532,9 @@ void main1() {
   queue_init(&v_out_samples_queue, sizeof(uint16_t), queue_length);
   queue_init(&i_out_samples_queue, sizeof(uint16_t), queue_length);
 
-  while (true) {
-    FMTDebug("This is a test string: {} | {}\n", -2000, 20.8F);
-    sleep_ms(1000);
+  pwm_manager.Initialize();
 
+  while (true) {
     // Calculate error (ref - actual)
     // d is duty cycle
     // Duty cycle limits (2.5% - 90%)
@@ -528,10 +567,9 @@ int main() {
   //    sleep_ms(1000);
   //  }
 
-  queue_init(&tune_values_queue, sizeof(TuneValues), 5);
-  queue_init(&smps_parameters_queue, sizeof(SMPSParameters), 5);
-
-  mutex_init(adc_mutex);
+  queue_init(&tune_values_queue, sizeof(TuneValues), 10);
+  queue_init(&smps_parameters_queue, sizeof(SMPSParameters), 10);
+  queue_init(&sensor_data_queue, sizeof(SensorData), 2);
 
   adc_init();
   adc_gpio_init(26);
@@ -542,134 +580,153 @@ int main() {
 
   multicore_launch_core1(main1);
 
-  //  pwm_manager.Initialize();
-
   std::array<char, 512> buf{};
 
   json j;
 
-  units::voltage::volt_t v_out_offset = 0_V;
-  float v_out_multiplier = 1.0F;
-  units::voltage::volt_t i_in_offset = 1.65_V;
-  float i_in_gain = 1.0F;
-  units::voltage::volt_t i_out_offset = 1.65_V;
-  float i_out_gain = 1.0F;
-  units::impedance::ohm_t in_shunt = 1_Ohm;
-  units::impedance::ohm_t out_shunt = 1_Ohm;
-
-  std::array<char, 128> fmt_buf{};
   while (true) {
-    //    auto cycle_start = get_cycle_count();
-    //    sleep_us(1);
-    //    auto cycle_end = get_cycle_count();
-    //    printf("Cycle count %i", cycle_end - cycle_start);
-    //    gpio_put(LED_PIN, true);
-    //    sleep_ms(1000);
-    //    gpio_put(LED_PIN, false);
-    //    sleep_ms(1000);
+    auto in_str = GetLine(buf, '\r');
+    if (!in_str.empty()) {
+      j = json::parse(in_str);
+      if (j.contains("SMPS")) {
+//        if (j["SMPS"].contains("Duty")) pwm_manager.SMPSDuty(j["SMPS"]["Duty"]);
+        if (j["SMPS"].contains("DeadBand")) pwm_manager.DeadBand(j["SMPS"]["DeadBand"]);
+//        if (j["SMPS"].contains("Frequency")) pwm_manager.SMPSFrequencyKHz(j["SMPS"]["Frequency"]);
+      }
 
-    //    auto in_str = GetLine(buf, '\r');
-    //    if (!in_str.empty()) {
-    //      j = json::parse(in_str);
-    //      if (j.contains("SMPS")) {
-    //        if (j["SMPS"].contains("Duty")) pwm_manager.SMPSDuty(j["SMPS"]["Duty"]);
-    //        if (j["SMPS"].contains("DeadBand")) pwm_manager.DeadBand(j["SMPS"]["DeadBand"]);
-    //        if (j["SMPS"].contains("Frequency")) pwm_manager.SMPSFrequencyKHz(j["SMPS"]["Frequency"]);
-    //      }
-    //
-    //      units::voltage::volt_t v_set_point = 0_V;
-    //      if (FetchJSONValue(v_set_point, j, "SMPS", "SetPoint")) {
-    //        FIFO_Push(MessageTypes::v_set_point);
-    //        FIFO_Push(v_set_point.to<float>());
-    //      }
-    //
-    //      units::voltage::volt_t v_in_offset = 0_V;
-    //      if (FetchJSONValue(v_in_offset, j, "Sensor", "Tune", "Vin", "Offset")) {
-    //        FIFO_Push(MessageTypes::v_in_offset);
-    //        FIFO_Push(v_in_offset.to<float>());
-    //      }
-    //
-    //      float v_in_multiplier = 1.0F;
-    //      if (FetchJSONValue(v_in_multiplier, j, "Sensor", "Tune", "Vin", "Multiplier")) {
-    //        FIFO_Push(MessageTypes::v_in_multiplier);
-    //        FIFO_Push(v_in_multiplier);
-    //      }
-    //
-    //      FetchJSONValue(v_out_offset, j, "Sensor", "Tune", "Vout", "Offset");
-    //      FetchJSONValue(v_out_multiplier, j, "Sensor", "Tune", "Vout", "Multiplier");
-    //
-    //      FetchJSONValue(i_in_offset, j, "Sensor", "Tune", "Iin", "Offset");
-    //      FetchJSONValue(i_in_gain, j, "Sensor", "Tune", "Iin", "Gain");
-    //
-    //      FetchJSONValue(i_out_offset, j, "Sensor", "Tune", "Iout", "Offset");
-    //      FetchJSONValue(i_out_gain, j, "Sensor", "Tune", "Iout", "Gain");
-    //
-    //      FetchJSONValue(in_shunt, j, "Sensor", "Parameters", "In", "ShuntOhms");
-    //
-    //      FetchJSONValue(out_shunt, j, "Sensor", "Parameters", "Out", "ShuntOhms");
-    //
-    //
-    //      //      if (j.contains("Sensor")) {
-    //      //        if (j["Sensor"].contains("Vin")) {
-    //      //          if (j["Sensor"]["Vin"].contains("Offset")) v_in_offset = j["Sensor"]["Vin"]["Offset"];
-    //      //          if (j["Sensor"]["Vin"].contains("Multiplier")) v_in_multiplier = j["Sensor"]["Vin"]["Multiplier"];
-    //      //        }
-    //      //
-    //      //        if (j["Sensor"].contains("Vout")) {
-    //      //          if (j["Sensor"]["Vout"].contains("Offset")) v_out_offset = j["Sensor"]["Vout"]["Offset"];
-    //      //          if (j["Sensor"]["Vout"].contains("Multiplier")) v_out_multiplier = j["Sensor"]["Vout"]["Multiplier"];
-    //      //        }
-    //      //
-    //      //        if (j["Sensor"].contains("Iin")) {
-    //      //          if (j["Sensor"]["Iin"].contains("Offset")) i_in_offset = j["Sensor"]["Iin"]["Offset"];
-    //      //          if (j["Sensor"]["Iin"].contains("Gain")) i_in_gain = j["Sensor"]["Iin"]["Gain"];
-    //      //        }
-    //      //
-    //      //        if (j["Sensor"].contains("Iout")) {
-    //      //          if (j["Sensor"]["Iout"].contains("Offset")) i_out_offset = j["Sensor"]["Iout"]["Offset"];
-    //      //          if (j["Sensor"]["Iout"].contains("Gain")) i_out_gain = j["Sensor"]["Iout"]["Gain"];
-    //      //        }
-    //      //      }
-    //      if (j.contains("Control")) {
-    //        CheckKeyThenCall(j["Control"], "LED", BuiltInLED);
-    //      }
-    //    }
-    //    j.clear();
-    //
-    //    //    j["SMPS"]["In"]["Volts"] = ADCVoltage(ADC_Channels::voltage_in);
-    //    //    j["SMPS"]["Out"]["Volts"] = ADCVoltage(ADC_Channels::voltage_out);
-    //    //    j["SMPS"]["In"]["Amps"] = ADCCurrent(ADC_Channels::current_in, 100, i_in_offset, i_in_gain);
-    //    //    j["SMPS"]["Out"]["Amps"] = ADCCurrent(ADC_Channels::current_out, 100, i_out_offset, i_out_gain);
-    //
-    //    for (size_t index = 0; index < averaging_array_size; ++index) {
-    //      mutex_enter_blocking(adc_mutex);
-    //      v_in_readings[index] = ADCRaw(ADC_Channels::voltage_in);
-    //      v_out_readings[index] = ADCRaw(ADC_Channels::voltage_out);
-    //      i_in_readings[index] = ADCRaw(ADC_Channels::current_in);
-    //      i_out_readings[index] = ADCRaw(ADC_Channels::current_out);
-    //      mutex_exit(adc_mutex);
-    //      sleep_us(1);
-    //    }
-    //
-    //    auto v_in_average = RawToVoltage(std::accumulate(v_in_readings.begin(), v_in_readings.end(), 0) / averaging_array_size);
-    //    auto v_out_average = RawToVoltage(std::accumulate(v_out_readings.begin(), v_out_readings.end(), 0) / averaging_array_size);
-    //    auto i_in_shunt_average = RawToVoltage(std::accumulate(i_in_readings.begin(), i_in_readings.end(), 0) / averaging_array_size);
-    //    auto i_out_shunt_average = RawToVoltage(std::accumulate(i_out_readings.begin(), i_out_readings.end(), 0) / averaging_array_size);
-    //
-    //    //    auto raw = 0.0F;
-    //    //    auto filtered = 0.0F;
-    //    //    filtered = 0.99*filtered + 0.01*raw;
-    //
-    //    j["SMPS"]["In"]["Volts"] = v_in_average.to<float>();
-    //    j["SMPS"]["In"]["Amps"] = VoltageToCurrent(i_in_shunt_average, in_shunt, i_in_offset, i_in_gain).to<float>();
-    //    j["SMPS"]["Out"]["Volts"] = v_out_average.to<float>();
-    //    j["SMPS"]["Out"]["Amps"] = VoltageToCurrent(i_out_shunt_average, out_shunt, i_out_offset, i_out_gain).to<float>();
-    //
-    //    j["System"]["TempC"] = CPUTemperature().to<float>();
-    //    std::string json_str = j.dump();
-    //    puts(json_str.data());
-    //    j.clear();
-    //
-    //    sleep_ms(10);
+      units::voltage::volt_t v_set_point = 0_V;
+      if (FetchJSONValue(v_set_point, j, "SMPS", "SetPoint")) {
+        SMPSParameters parameters{.v_out_set_point = v_set_point};
+        queue_try_add(&smps_parameters_queue, &parameters);
+      }
+
+      float duty = 0;
+      if (FetchJSONValue(duty, j, "SMPS", "Duty")) {
+        SMPSParameters parameters{.user_duty = duty};
+        queue_try_add(&smps_parameters_queue, &parameters);
+      }
+
+      bool enable = false;
+      if (FetchJSONValue(enable, j, "SMPS", "Enable")) {
+        SMPSParameters parameters{.enable = enable};
+        queue_try_add(&smps_parameters_queue, &parameters);
+      }
+
+      bool pi_loop_enable = false;
+      if (FetchJSONValue(pi_loop_enable, j, "SMPS", "PIEnable")) {
+        SMPSParameters parameters{.pi_loop_enable = pi_loop_enable};
+        queue_try_add(&smps_parameters_queue, &parameters);
+      }
+
+      units::voltage::volt_t v_in_offset = 0_V;
+      if (FetchJSONValue(v_in_offset, j, "Sensor", "Tune", "Vin", "Offset")) {
+        VTune v_tune{.offset = v_in_offset};
+        TuneValues tune{.v_in_tune = v_tune};
+        queue_try_add(&tune_values_queue, &tune);
+      }
+
+      float v_in_multiplier = 1.0F;
+      if (FetchJSONValue(v_in_multiplier, j, "Sensor", "Tune", "Vin", "Multiplier")) {
+        VTune v_tune{.multiplier = v_in_multiplier};
+        TuneValues tune{.v_in_tune = v_tune};
+        queue_try_add(&tune_values_queue, &tune);
+      }
+
+      units::voltage::volt_t v_out_offset = 0_V;
+      if (FetchJSONValue(v_out_offset, j, "Sensor", "Tune", "Vout", "Offset")) {
+        VTune v_tune{.offset = v_out_offset};
+        TuneValues tune{.v_out_tune = v_tune};
+        queue_try_add(&tune_values_queue, &tune);
+      }
+      float v_out_multiplier = 1.0F;
+      if (FetchJSONValue(v_out_multiplier, j, "Sensor", "Tune", "Vout", "Multiplier")) {
+        VTune v_tune{.multiplier = v_out_multiplier};
+        TuneValues tune{.v_out_tune = v_tune};
+        queue_try_add(&tune_values_queue, &tune);
+      }
+
+      units::voltage::volt_t i_in_offset = 1.65_V;
+      if (FetchJSONValue(i_in_offset, j, "Sensor", "Tune", "Iin", "Offset")) {
+        ITune i_tune{.offset = i_in_offset};
+        TuneValues tune{.i_in_tune = i_tune};
+        queue_try_add(&tune_values_queue, &tune);
+      }
+      float i_in_gain = 1.0F;
+      if (FetchJSONValue(i_in_gain, j, "Sensor", "Tune", "Iin", "Gain")) {
+        ITune i_tune{.gain = i_in_gain};
+        TuneValues tune{.i_in_tune = i_tune};
+        queue_try_add(&tune_values_queue, &tune);
+      }
+
+      units::voltage::volt_t i_out_offset = 1.65_V;
+      if (FetchJSONValue(i_out_offset, j, "Sensor", "Tune", "Iout", "Offset")) {
+        ITune i_tune{.offset = i_out_offset};
+        TuneValues tune{.i_out_tune = i_tune};
+        queue_try_add(&tune_values_queue, &tune);
+      }
+      float i_out_gain = 1.0F;
+      if (FetchJSONValue(i_out_gain, j, "Sensor", "Tune", "Iout", "Gain")) {
+        ITune i_tune{.gain = i_out_gain};
+        TuneValues tune{.i_out_tune = i_tune};
+        queue_try_add(&tune_values_queue, &tune);
+      }
+
+      units::impedance::ohm_t in_shunt = 1_Ohm;
+      if (FetchJSONValue(in_shunt, j, "Sensor", "Parameters", "In", "ShuntOhms")) {
+        ITune i_tune{.shunt = in_shunt};
+        TuneValues tune{.i_in_tune = i_tune};
+        queue_try_add(&tune_values_queue, &tune);
+      }
+      units::impedance::ohm_t out_shunt = 1_Ohm;
+      if (FetchJSONValue(out_shunt, j, "Sensor", "Parameters", "Out", "ShuntOhms")) {
+        ITune i_tune{.shunt = out_shunt};
+        TuneValues tune{.i_out_tune = i_tune};
+        queue_try_add(&tune_values_queue, &tune);
+      }
+
+      if (j.contains("Control")) {
+        CheckKeyThenCall(j["Control"], "LED", BuiltInLED);
+      }
+    }
+    j.clear();
+
+    //    j["SMPS"]["In"]["Volts"] = ADCVoltage(ADC_Channels::voltage_in);
+    //    j["SMPS"]["Out"]["Volts"] = ADCVoltage(ADC_Channels::voltage_out);
+    //    j["SMPS"]["In"]["Amps"] = ADCCurrent(ADC_Channels::current_in, 100, i_in_offset, i_in_gain);
+    //    j["SMPS"]["Out"]["Amps"] = ADCCurrent(ADC_Channels::current_out, 100, i_out_offset, i_out_gain);
+
+//    for (size_t index = 0; index < averaging_array_size; ++index) {
+//      mutex_enter_blocking(adc_mutex);
+//      v_in_readings[index] = ADCRaw(ADC_Channels::voltage_in);
+//      v_out_readings[index] = ADCRaw(ADC_Channels::voltage_out);
+//      i_in_readings[index] = ADCRaw(ADC_Channels::current_in);
+//      i_out_readings[index] = ADCRaw(ADC_Channels::current_out);
+//      mutex_exit(adc_mutex);
+//      sleep_us(1);
+//    }
+//
+//    auto v_in_average = RawToVoltage(std::accumulate(v_in_readings.begin(), v_in_readings.end(), 0) / averaging_array_size);
+//    auto v_out_average = RawToVoltage(std::accumulate(v_out_readings.begin(), v_out_readings.end(), 0) / averaging_array_size);
+//    auto i_in_shunt_average = RawToVoltage(std::accumulate(i_in_readings.begin(), i_in_readings.end(), 0) / averaging_array_size);
+//    auto i_out_shunt_average = RawToVoltage(std::accumulate(i_out_readings.begin(), i_out_readings.end(), 0) / averaging_array_size);
+
+    //    auto raw = 0.0F;
+    //    auto filtered = 0.0F;
+    //    filtered = 0.99*filtered + 0.01*raw;
+
+    SensorData sensor_data{};
+    while (queue_try_remove(&sensor_data_queue, &sensor_data)) {
+      j["SMPS"]["In"]["Volts"] = sensor_data.v_in.to<float>();
+      j["SMPS"]["In"]["Amps"] = sensor_data.i_in.to<float>();
+      j["SMPS"]["Out"]["Volts"] = sensor_data.v_out.to<float>();
+      j["SMPS"]["Out"]["Amps"] = sensor_data.i_out.to<float>();
+      std::string json_str = j.dump();
+      puts(json_str.data());
+    }
+
+//    j["System"]["TempC"] = CPUTemperature().to<float>();
+    j.clear();
+
+    sleep_ms(10);
   }
 }

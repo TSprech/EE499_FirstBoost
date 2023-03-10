@@ -97,11 +97,11 @@ class RegulatorValues(ctk.CTkFrame):
 
 
 class TuneTab:
-    def __init__(self, root, label: str, emit: str, row: int, default):
-        self.v_in_offset_label = ctk.CTkLabel(root, text=label, font=hfonts.header_3_font)
-        self.v_in_offset_label.grid(row=row, column=0, sticky="nw")
-        self.v_in_offset_frame = EntryWithButtons(root, num_type=float, emit_message=emit, font=hfonts.header_1_font, default=default)
-        self.v_in_offset_frame.grid(row=row, column=1, sticky="ne")
+    def __init__(self, root, label: str, emit: str, row: int, default:float=0, min_value:float=0, max_value:float=100, step:float=1):
+        self.label = ctk.CTkLabel(root, text=label, font=hfonts.header_3_font)
+        self.label.grid(row=row, column=0, sticky="nw")
+        self.entry = EntryWithButtons(root, num_type=float, emit_message=emit, font=hfonts.header_1_font, default=default, min_value=min_value, max_value=max_value, step=step)
+        self.entry.grid(row=row, column=1, sticky="ne")
 
 
 # class MessageBox(ctk.CTkFrame):
@@ -191,10 +191,13 @@ class EntryWithButtons(ctk.CTkFrame):
         bus.emit(self.emit_message, self.num_type(self.string_var.get()))
         return True
 
-    def __init__(self, root, emit_message: str, font, format='{:3.1f}', num_type=float, default=0):
+    def __init__(self, root, emit_message: str, font, format='{:3.1f}', num_type=float, default=0, min_value=0, max_value=100, step=1):
         super().__init__(root, fg_color="transparent")
         self.emit_message = emit_message
         self.num_type = num_type
+        self.min_value = min_value
+        self.max_value = max_value
+        self.step = step
         self.grid_rowconfigure(0, weight=2)
         self.grid_columnconfigure(0, weight=2)
         self.grid_columnconfigure(1, weight=1)
@@ -220,16 +223,16 @@ class EntryWithButtons(ctk.CTkFrame):
 
     def inc_callback(self):
         value = self.num_type(self.value.get())
-        if value < 100:
+        if value < self.max_value:
             self.value.delete(0, 10)
-            self.value.insert(0, value + 1)
+            self.value.insert(0, value + self.step)
             self.entry_lose_focus_callback()
 
     def dec_callback(self):
         value = self.num_type(self.value.get())
-        if value > 0:
+        if value > self.min_value:
             self.value.delete(0, 10)
-            self.value.insert(0, value - 1)
+            self.value.insert(0, value - self.step)
             self.entry_lose_focus_callback()
 
 
@@ -302,26 +305,26 @@ class App(ctk.CTk):
         button_width = self.tune_tabs.cget('width')
 
         self.tune_tabs.add('V In')
-        self.v_in_tune_offset_row = TuneTab(self.tune_tabs.tab('V In'), label='V In Offset: ', emit='gui:v_in_offset_change', row=0, default=v_in_offset)
-        self.v_in_tune_multiplier_row = TuneTab(self.tune_tabs.tab('V In'), label='V In Multiplier: ', emit='gui:v_in_multiplier_change', row=1, default=v_in_multiplier)
+        self.v_in_tune_offset_row = TuneTab(self.tune_tabs.tab('V In'), label='V In Offset: ', emit='gui:v_in_offset_change', row=0, default=v_in_offset, min_value=-3.3, max_value=3.3, step=0.01)
+        self.v_in_tune_multiplier_row = TuneTab(self.tune_tabs.tab('V In'), label='V In Multiplier: ', emit='gui:v_in_multiplier_change', row=1, default=v_in_multiplier, min_value=0, max_value=20, step=0.1)
         self.v_in_tune_apply_button = ctk.CTkButton(self.tune_tabs.tab('V In'), text='Apply', font=hfonts.header_2_font, height=button_height, width=button_width)
         self.v_in_tune_apply_button.grid(row=2, column=0, columnspan=2, pady=(10, 0), sticky="nwe")
 
         self.tune_tabs.add("I In")
-        self.i_in_tune_offset_row = TuneTab(self.tune_tabs.tab('I In'), label='I In Offset: ', emit='gui:i_in_offset_change', row=0, default=i_in_offset)
-        self.i_in_tune_gain_row = TuneTab(self.tune_tabs.tab('I In'), label='I In Gain: ', emit='gui:i_in_gain_change', row=1, default=i_in_gain)
+        self.i_in_tune_offset_row = TuneTab(self.tune_tabs.tab('I In'), label='I In Offset: ', emit='gui:i_in_offset_change', row=0, default=i_in_offset, min_value=-3.3, max_value=3.3, step=0.01)
+        self.i_in_tune_gain_row = TuneTab(self.tune_tabs.tab('I In'), label='I In Gain: ', emit='gui:i_in_gain_change', row=1, default=i_in_gain, min_value=0, max_value=20, step=0.1)
         self.i_in_tune_apply_button = ctk.CTkButton(self.tune_tabs.tab('I In'), text='Apply', font=hfonts.header_2_font, height=button_height, width=button_width)
         self.i_in_tune_apply_button.grid(row=2, column=0, columnspan=2, pady=(10, 0), sticky="nwe")
 
         self.tune_tabs.add("V Out")
-        self.v_out_tune_offset_row = TuneTab(self.tune_tabs.tab('V Out'), label='V Out Offset: ', emit='gui:v_out_offset_change', row=0, default=v_out_offset)
-        self.v_out_tune_multiplier_row = TuneTab(self.tune_tabs.tab('V Out'), label='V Out Multiplier: ', emit='gui:v_out_multiplier_change', row=1, default=v_out_multiplier)
+        self.v_out_tune_offset_row = TuneTab(self.tune_tabs.tab('V Out'), label='V Out Offset: ', emit='gui:v_out_offset_change', row=0, default=v_out_offset, min_value=-3.3, max_value=3.3, step=0.01)
+        self.v_out_tune_multiplier_row = TuneTab(self.tune_tabs.tab('V Out'), label='V Out Multiplier: ', emit='gui:v_out_multiplier_change', row=1, default=v_out_multiplier, min_value=0, max_value=20, step=0.1)
         self.v_out_tune_apply_button = ctk.CTkButton(self.tune_tabs.tab('V Out'), text='Apply', font=hfonts.header_2_font, height=button_height, width=button_width)
         self.v_out_tune_apply_button.grid(row=2, column=0, columnspan=2, pady=(10, 0), sticky="nwe")
 
         self.tune_tabs.add("I Out")
-        self.i_out_tune_offset_row = TuneTab(self.tune_tabs.tab('I Out'), label='I Out Offset: ', emit='gui:i_out_offset_change', row=0, default=i_out_offset)
-        self.i_out_tune_gain_row = TuneTab(self.tune_tabs.tab('I Out'), label='I Out Gain: ', emit='gui:i_out_gain_change', row=1, default=i_out_gain)
+        self.i_out_tune_offset_row = TuneTab(self.tune_tabs.tab('I Out'), label='I Out Offset: ', emit='gui:i_out_offset_change', row=0, default=i_out_offset, min_value=-3.3, max_value=3.3, step=0.01)
+        self.i_out_tune_gain_row = TuneTab(self.tune_tabs.tab('I Out'), label='I Out Gain: ', emit='gui:i_out_gain_change', row=1, default=i_out_gain, min_value=0, max_value=20, step=0.1)
         self.i_out_tune_apply_button = ctk.CTkButton(self.tune_tabs.tab('I Out'), text='Apply', font=hfonts.header_2_font, height=button_height, width=button_width)
         self.i_out_tune_apply_button.grid(row=2, column=0, columnspan=2, pady=(10, 0), sticky="nwe")
 
@@ -352,26 +355,50 @@ app = App()
 
 @bus.on('gui:v_in_offset_change')
 def v_in_offset_change(value):
-    global v_in_offset
-    v_in_offset = value
+    doc = {"Sensor": {"Tune": {"Vin": {"Offset": value}}}}
+    bus.emit('serial:transmit', doc)
 
 
 @bus.on('gui:v_in_multiplier_change')
 def v_in_multiplier_change(value):
-    global v_in_multiplier
-    v_in_multiplier = value
+    doc = {"Sensor": {"Tune": {"Vin": {"Multiplier": value}}}}
+    bus.emit('serial:transmit', doc)
 
 
 @bus.on('gui:v_out_offset_change')
 def v_out_offset_change(value):
-    global v_out_offset
-    v_out_offset = value
+    doc = {"Sensor": {"Tune": {"Vout": {"Offset": value}}}}
+    bus.emit('serial:transmit', doc)
 
 
 @bus.on('gui:v_out_multiplier_change')
 def v_out_multiplier_change(value):
-    global v_out_multiplier
-    v_out_multiplier = value
+    doc = {"Sensor": {"Tune": {"Vout": {"Multiplier": value}}}}
+    bus.emit('serial:transmit', doc)
+
+
+@bus.on('gui:i_in_offset_change')
+def i_in_offset_change(value):
+    doc = {"Sensor": {"Tune": {"Iin": {"Offset": value}}}}
+    bus.emit('serial:transmit', doc)
+
+
+@bus.on('gui:i_in_gain_change')
+def i_in_gain_change(value):
+    doc = {"Sensor": {"Tune": {"Iin": {"Gain": value}}}}
+    bus.emit('serial:transmit', doc)
+
+
+@bus.on('gui:i_out_offset_change')
+def i_out_offset_change(value):
+    doc = {"Sensor": {"Tune": {"Iout": {"Offset": value}}}}
+    bus.emit('serial:transmit', doc)
+
+
+@bus.on('gui:i_out_gain_change')
+def i_out_gain_change(value):
+    doc = {"Sensor": {"Tune": {"Iout": {"Gain": value}}}}
+    bus.emit('serial:transmit', doc)
 
 
 @bus.on('gui:port_connect_button')
@@ -442,12 +469,12 @@ def updated_from_json(json_data: dict):
     # json_formatted_str = json.dumps(json_data, indent=2)
     # log.debug(json_formatted_str)
     try:
-        app.set_v_in((json_data["SMPS"]['In']['VVolts']-v_in_offset) * v_in_multiplier)
-        app.set_i_in((json_data["SMPS"]['In']['IVolts'] - i_in_offset) * i_in_gain / 0.1)
+        app.set_v_in(json_data["SMPS"]['In']['Volts'])
+        app.set_i_in(json_data["SMPS"]['In']['Amps'])
         app.set_p_in(float(app.get_v_in()) * float(app.get_i_in()))
 
-        app.set_v_out((json_data["SMPS"]['Out']['VVolts']-v_out_offset) * v_out_multiplier)
-        app.set_i_out((json_data["SMPS"]['Out']['IVolts'] - i_out_offset) * i_out_gain / 0.1)
+        app.set_v_out(json_data["SMPS"]['Out']['Volts'])
+        app.set_i_out(json_data["SMPS"]['Out']['Amps'])
         app.set_p_out(float(app.get_v_out()) * float(app.get_i_out()))
 
         if 'System' in json_data and 'Message' in json_data['System']:
