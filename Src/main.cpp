@@ -25,6 +25,8 @@
 #include "units.h"
 using namespace units::literals;
 
+#include "fmt/core.h"
+
 constexpr auto LED_PIN = PICO_DEFAULT_LED_PIN;
 constexpr auto MONITOR_PIN = 2;
 //constexpr auto LED_PIN = 13;
@@ -265,6 +267,7 @@ auto get_cycle_count() -> uint32_t {
 //auto FIFO_Pop(MessageTypes mtype) {
 //}
 
+#include "fmt/format.h"
 #include "pico/mutex.h"
 #include "pico/util/queue.h"
 
@@ -447,12 +450,34 @@ bool BlinkLED(repeating_timer_t* rt) {
   return true;  // Return true to repeat the timer
 }
 
+template <typename... T>
+auto FMTDebug(fmt::format_string<T...> fmt, T&&... args) {
+  fmt::memory_buffer buf;
+  auto end = vformat_to(std::back_inserter(buf), fmt, fmt::make_format_args(args...));
+
+  if (get_core_num() == 0) { // Check which core called for the debug and output to the appropriate UART
+    //  for (auto* data = buf.begin(); data != end; ++data) {
+    for (auto i = 0; i < buf.size(); ++i) {
+      uart_putc(uart0, buf[i]);
+    }
+  } else {
+    for (auto i = 0; i < buf.size(); ++i) {
+      uart_putc(uart1, buf[i]);
+    }
+  }
+}
+
 void main1() {
   constexpr size_t feedback_average_number = 5;
   std::array<uint16_t, feedback_average_number> v_in_feedback{};
 
   gpio_init(MONITOR_PIN);
   gpio_set_dir(MONITOR_PIN, GPIO_OUT);
+
+  uart_init(uart1, 115200);
+
+  gpio_set_function(4, GPIO_FUNC_UART);
+  gpio_set_function(5, GPIO_FUNC_UART);
 
   repeating_timer_t timer;
 
@@ -468,6 +493,9 @@ void main1() {
   queue_init(&i_out_samples_queue, sizeof(uint16_t), queue_length);
 
   while (true) {
+    FMTDebug("This is a test string: {} | {}\n", -2000, 20.8F);
+    sleep_ms(1000);
+
     // Calculate error (ref - actual)
     // d is duty cycle
     // Duty cycle limits (2.5% - 90%)
@@ -529,6 +557,7 @@ int main() {
   units::impedance::ohm_t in_shunt = 1_Ohm;
   units::impedance::ohm_t out_shunt = 1_Ohm;
 
+  std::array<char, 128> fmt_buf{};
   while (true) {
     //    auto cycle_start = get_cycle_count();
     //    sleep_us(1);
