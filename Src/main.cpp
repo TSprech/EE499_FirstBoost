@@ -25,7 +25,6 @@
 #include "units.h"
 using namespace units::literals;
 
-
 constexpr auto LED_PIN = PICO_DEFAULT_LED_PIN;
 constexpr auto MONITOR_PIN = 2;
 //constexpr auto LED_PIN = 13;
@@ -87,26 +86,6 @@ inline auto ParseEStop(json& j) -> void {
   }
 }
 
-uint16_t pwm_a = 0;
-uint16_t pwm_b = 0;
-uint16_t deadband = 0;
-float duty = 0;
-
-#include <atomic>
-
-//std::atomic<units::voltage::volt_t> v_in_offset = 0_V;
-////units::voltage::volt_t v_in_offset = 0_V;
-//std::atomic<float> v_in_multiplier = 1.0F;
-//
-//std::atomic<units::voltage::volt_t> v_out_offset = 0_V;
-//std::atomic<float> v_out_multiplier = 1.0F;
-//
-//std::atomic<units::voltage::volt_t> i_in_offset = 1.65_V;
-//std::atomic<float> i_in_gain = 1.0F;
-//
-//std::atomic<units::voltage::volt_t> i_out_offset = 1.65_V;
-//std::atomic<float> i_out_gain = 1.0F;
-
 enum class ADC_Channels : uint8_t {
   voltage_in = 0,
   current_in = 1,
@@ -125,9 +104,18 @@ constexpr auto RawToVoltage(uint16_t adc_raw) -> units::voltage::volt_t {
   return units::voltage::volt_t{static_cast<float>(adc_raw) * conversion_factor};
 }
 
+constexpr auto RawToVoltage(uint16_t adc_raw, units::voltage::volt_t offset, float multiplier) -> units::voltage::volt_t {
+  auto voltage = RawToVoltage(adc_raw);
+  return (voltage - offset) * multiplier;
+}
+
 auto VoltageToCurrent(units::voltage::volt_t shunt_voltage, units::impedance::ohm_t shunt, units::voltage::volt_t offset, float gain) -> units::current::ampere_t {
   auto adjusted_shunt_voltage = (shunt_voltage - offset) * gain;
   return adjusted_shunt_voltage / shunt;
+}
+
+auto RawToCurrent(uint16_t adc_raw, units::impedance::ohm_t shunt, units::voltage::volt_t offset, float gain) -> units::current::ampere_t {
+  return VoltageToCurrent(RawToVoltage(adc_raw), shunt, offset, gain);
 }
 
 auto CorrectVoltage(units::voltage::volt_t voltage, units::voltage::volt_t offset, float multiplier) -> units::voltage::volt_t {
@@ -158,7 +146,7 @@ struct PWMManager {
   }
 
   auto DeadBand(uint16_t count) {
-    deadband = count;
+    //    deadband = count;
     deadband_ = count;
   }
 
@@ -193,7 +181,7 @@ struct PWMManager {
   }
 
   auto SMPSDuty(float duty_cycle_percentage) {
-    duty = duty_cycle_percentage / 100;
+    //    duty = duty_cycle_percentage / 100;
     auto top = Top();
     uint16_t a_level = 0;
     uint16_t b_level = 0;
@@ -210,8 +198,8 @@ struct PWMManager {
       b_level += deadband_;
     }
 
-    pwm_a = a_level;
-    pwm_b = b_level;
+    //    pwm_a = a_level;
+    //    pwm_b = b_level;
 
     pwm_set_both_levels(slice_number_, a_level, b_level);
   }
@@ -258,49 +246,112 @@ PWMManager pwm_manager(pwm_gpio_to_slice_num(0));
 
 auto get_cycle_count() -> uint32_t {
   // Init lines
-//  systick_hw->csr = 0x5;
-//  systick_hw->rvr = 0x00FFFFFF;
+  //  systick_hw->csr = 0x5;
+  //  systick_hw->rvr = 0x00FFFFFF;
   return systick_hw->cvr;
 }
 
-enum class MessageTypes : uint32_t {
-  v_in_offset,
-  v_in_multiplier,
-  v_out_offset,
-  v_out_multiplier,
-  i_in_offset,
-  i_in_gain,
-  i_out_offset,
-  i_out_gain,
-  v_set_point
-};
-
-template <typename T> requires std::same_as<std::underlying_type_t<T>, uint32_t> || std::same_as<T, uint32_t>
-auto FIFO_Push(T value) -> void {
-  multicore_fifo_push_blocking(static_cast<uint32_t>(value));
-}
-
-auto FIFO_Push(float value) -> void {
-  auto value_u32 = *reinterpret_cast<uint32_t*>(&value); // Convert the 4 bytes of the float to a uint32_t without modifying the bits
-  multicore_fifo_push_blocking(value_u32);
-}
-
-auto FIFO_Pop(MessageTypes mtype) {
-
-}
+//template <typename T>
+//  requires std::same_as<std::underlying_type_t<T>, uint32_t> || std::same_as<T, uint32_t>
+//auto FIFO_Push(T value) -> void {
+//  multicore_fifo_push_blocking(static_cast<uint32_t>(value));
+//}
+//
+//auto FIFO_Push(float value) -> void {
+//  auto value_u32 = *reinterpret_cast<uint32_t*>(&value);  // Convert the 4 bytes of the float to a uint32_t without modifying the bits
+//  multicore_fifo_push_blocking(value_u32);
+//}
+//
+//auto FIFO_Pop(MessageTypes mtype) {
+//}
 
 #include "pico/mutex.h"
 #include "pico/util/queue.h"
 
 mutex_t* adc_mutex;
 
-queue_t v_in_samples;
-queue_t i_in_samples;
-queue_t v_out_samples;
-queue_t i_out_samples;
+queue_t v_in_samples_queue;
+queue_t i_in_samples_queue;
+queue_t v_out_samples_queue;
+queue_t i_out_samples_queue;
 
-bool BlinkLED(repeating_timer_t *rt) {
-  static auto state = true;
+queue_t tune_values_queue;
+queue_t smps_parameters_queue;
+
+#include <optional>
+
+struct VTune {
+  std::optional<units::voltage::volt_t> offset;
+  std::optional<float> multiplier;
+};
+
+struct ITune {
+  std::optional<units::impedance::ohm_t> shunt;
+  std::optional<units::voltage::volt_t> offset;
+  std::optional<float> gain;
+};
+
+struct TuneValues {
+  std::optional<VTune> v_in_tune;
+  std::optional<ITune> i_in_tune;
+  std::optional<VTune> v_out_tune;
+  std::optional<ITune> i_out_tune;
+};
+
+struct SMPSParameters {
+  std::optional<units::voltage::volt_t> v_out_set_point;
+  std::optional<float> user_duty;
+  std::optional<bool> enable;
+  std::optional<bool> pi_loop_enable;
+};
+
+auto AverageFromQueue(queue_t& queue) {
+  uint32_t sum = 0;
+  size_t number_of_data_points = 0;
+  uint16_t current_data = 0;
+  while (queue_try_remove(&queue, &current_data)) {
+    sum += current_data;
+    ++number_of_data_points;
+  }
+  return sum / number_of_data_points;
+}
+
+auto AverageVoltageFromQueue(queue_t& queue) {
+  return RawToVoltage(AverageFromQueue(queue));
+}
+
+auto AverageVoltageFromQueue(queue_t& queue, units::voltage::volt_t offset, float multiplier) {
+  return RawToVoltage(AverageFromQueue(queue), offset, multiplier);
+}
+
+auto AverageCurrentFromQueue(queue_t& queue, units::impedance::ohm_t shunt, units::voltage::volt_t offset, float gain) {
+  return RawToCurrent(AverageFromQueue(queue), shunt, offset, gain);
+}
+
+#define EXTRACT_FUNCTION(func_name, struct_type, variable_type, member_name)        \
+  auto func_name(std::optional<struct_type> tune_struct, variable_type& variable) { \
+    if (tune_struct && tune_struct.value().member_name) {                           \
+      variable = tune_struct.value().member_name.value();                           \
+    }                                                                               \
+  }                                                                                 \
+  static_assert(true)
+
+EXTRACT_FUNCTION(ExtractOffset, VTune, std::optional<units::voltage::volt_t>, offset);
+EXTRACT_FUNCTION(ExtractMultiplier, VTune, std::optional<float>, multiplier);
+EXTRACT_FUNCTION(ExtractOffset, ITune, std::optional<units::voltage::volt_t>, offset);
+EXTRACT_FUNCTION(ExtractGain, ITune, std::optional<float>, gain);
+EXTRACT_FUNCTION(ExtractShunt, ITune, std::optional<units::impedance::ohm_t>, shunt);
+
+EXTRACT_FUNCTION(ExtractVOutSetPoint, SMPSParameters, std::optional<units::voltage::volt_t>, v_out_set_point);
+EXTRACT_FUNCTION(ExtractUserDuty, SMPSParameters, std::optional<float>, user_duty);
+EXTRACT_FUNCTION(ExtractEnable, SMPSParameters, std::optional<bool>, enable);
+EXTRACT_FUNCTION(ExtractPILoopEnable, SMPSParameters, std::optional<bool>, pi_loop_enable);
+
+constexpr auto rate = 5_kHz;                        // Whatever the PI loop call rate will be
+constexpr units::time::second_t period = 1 / rate;  // Convert the Hz to period
+
+bool BlinkLED(repeating_timer_t* rt) {
+  /*  static auto state = true;
   if (state) {
     gpio_put(LED_PIN, true);
     gpio_put(MONITOR_PIN, true);
@@ -310,15 +361,90 @@ bool BlinkLED(repeating_timer_t *rt) {
     gpio_put(MONITOR_PIN, false);
   }
   state = !state;
-//
-//  uint32_t sum = 0;
-//  while (!queue_is_empty(&v_in_samples)) {
-//    uint16_t current_data
-//    queue_try_remove()
-//  }
+  */
 
+  static VTune v_in_tune = {
+      .offset = 0_V,
+      .multiplier = 2};
 
-  return true; // Return true to repeat the timer
+  static VTune v_out_tune = {
+      .offset = 0_V,
+      .multiplier = 10};
+
+  static ITune i_in_tune = {
+      .shunt = 100_mOhm,
+      .offset = 1.65_V,
+      .gain = 2};
+
+  static ITune i_out_tune = {
+      .shunt = 100_mOhm,
+      .offset = 1.65_V,
+      .gain = 2};
+
+  static SMPSParameters smps_parameters = {
+      .v_out_set_point = 0_V,
+      .user_duty = 0.25,
+      .enable = false,
+      .pi_loop_enable = false};
+
+  TuneValues tune{};
+  while (queue_try_remove(&tune_values_queue, &tune)) {
+    ExtractOffset(tune.v_in_tune, v_in_tune.offset);
+    ExtractMultiplier(tune.v_in_tune, v_in_tune.multiplier);
+
+    ExtractOffset(tune.v_out_tune, v_out_tune.offset);
+    ExtractMultiplier(tune.v_out_tune, v_out_tune.multiplier);
+
+    ExtractShunt(tune.i_in_tune, i_in_tune.shunt);
+    ExtractOffset(tune.i_in_tune, i_in_tune.offset);
+    ExtractGain(tune.i_in_tune, i_in_tune.gain);
+
+    ExtractShunt(tune.i_out_tune, i_out_tune.shunt);
+    ExtractOffset(tune.i_out_tune, i_out_tune.offset);
+    ExtractGain(tune.i_out_tune, i_out_tune.gain);
+  }
+
+  SMPSParameters parameters{};
+  while (queue_try_remove(&smps_parameters_queue, &parameters)) {
+    ExtractVOutSetPoint(parameters, smps_parameters.v_out_set_point);
+    ExtractUserDuty(parameters, smps_parameters.user_duty);
+    ExtractEnable(parameters, smps_parameters.enable);
+    ExtractPILoopEnable(parameters, smps_parameters.pi_loop_enable);
+  }
+
+  auto v_in_average = AverageVoltageFromQueue(v_in_samples_queue, v_in_tune.offset.value(), v_in_tune.multiplier.value());
+  auto i_in_average = AverageCurrentFromQueue(i_in_samples_queue, i_in_tune.shunt.value(), i_in_tune.offset.value(), i_in_tune.gain.value());
+  auto v_out_average = AverageVoltageFromQueue(v_out_samples_queue, v_out_tune.offset.value(), v_out_tune.multiplier.value());
+  auto i_out_average = AverageCurrentFromQueue(i_out_samples_queue, i_out_tune.shunt.value(), i_out_tune.offset.value(), i_out_tune.gain.value());
+
+  constexpr float duty_max = 0.9F;
+  constexpr float duty_min = 0.2F;
+  constexpr float k_p = 1.0F;
+  constexpr float k_i = 1.0F;
+  static float duty = 0.0F;
+  static float duty_integrated = 0.0F;
+
+  if (smps_parameters.enable && smps_parameters.pi_loop_enable) {
+    auto error = smps_parameters.v_out_set_point.value() - v_out_average;
+
+    float duty_out = k_p * error.to<float>() + duty_integrated;
+    duty_out = std::clamp(duty_out, duty_min, duty_max);
+
+    duty_integrated = k_i * error.to<float>() * period.to<float>();
+    duty_integrated = std::clamp(duty_integrated, duty_min, duty_max);
+
+    duty = duty_out;
+  } else {
+    duty_integrated = duty;
+  }
+
+  if (smps_parameters.enable) {
+    pwm_manager.SMPSDuty(duty);
+  } else {
+    pwm_manager.SMPSDuty(0);
+  }
+
+  return true;  // Return true to repeat the timer
 }
 
 void main1() {
@@ -330,19 +456,16 @@ void main1() {
 
   repeating_timer_t timer;
 
-  auto rate = 5_kHz; // Whatever the PI loop call rate will be
-  units::time::microsecond_t period = 1 / rate; // Convert the Hz to period
-
-  if (!add_repeating_timer_us(period.to<uint32_t>(), BlinkLED, nullptr, &timer)){
+  if (!add_repeating_timer_us(units::time::microsecond_t{period}.to<uint32_t>(), BlinkLED, nullptr, &timer)) {
     printf("Failed to create timer");
   }
 
   constexpr size_t queue_length = 200;
 
-  queue_init(&v_in_samples, sizeof(uint16_t), queue_length);
-  queue_init(&i_in_samples, sizeof(uint16_t), queue_length);
-  queue_init(&v_out_samples, sizeof(uint16_t), queue_length);
-  queue_init(&i_out_samples, sizeof(uint16_t), queue_length);
+  queue_init(&v_in_samples_queue, sizeof(uint16_t), queue_length);
+  queue_init(&i_in_samples_queue, sizeof(uint16_t), queue_length);
+  queue_init(&v_out_samples_queue, sizeof(uint16_t), queue_length);
+  queue_init(&i_out_samples_queue, sizeof(uint16_t), queue_length);
 
   while (true) {
     // Calculate error (ref - actual)
@@ -352,17 +475,17 @@ void main1() {
     // Update the integrator (vkp and vki are constants)
     // Else case prevents duty mismatch when enabling
 
-//    auto v_in_raw = ADCRaw(ADC_Channels::voltage_in);
-//    queue_try_add(&v_in_samples, &v_in_raw);
-//
-//    auto i_in_raw = ADCRaw(ADC_Channels::current_in);
-//    queue_try_add(&i_in_samples, &i_in_raw);
-//
-//    auto v_out_raw = ADCRaw(ADC_Channels::voltage_out);
-//    queue_try_add(&v_out_samples, &v_out_raw);
-//
-//    auto i_out_raw = ADCRaw(ADC_Channels::current_out);
-//    queue_try_add(&i_out_samples, &i_out_raw);
+    auto v_in_raw = ADCRaw(ADC_Channels::voltage_in);
+    queue_try_add(&v_in_samples_queue, &v_in_raw);
+
+    auto i_in_raw = ADCRaw(ADC_Channels::current_in);
+    queue_try_add(&i_in_samples_queue, &i_in_raw);
+
+    auto v_out_raw = ADCRaw(ADC_Channels::voltage_out);
+    queue_try_add(&v_out_samples_queue, &v_out_raw);
+
+    auto i_out_raw = ADCRaw(ADC_Channels::current_out);
+    queue_try_add(&i_out_samples_queue, &i_out_raw);
   }
 }
 
@@ -370,12 +493,15 @@ int main() {
   stdio_init_all();
   gpio_init(LED_PIN);
   gpio_set_dir(LED_PIN, GPIO_OUT);
-//  while(true) {
-//    gpio_put(LED_PIN, true);
-//    sleep_ms(1000);
-//    gpio_put(LED_PIN, false);
-//    sleep_ms(1000);
-//  }
+  //  while(true) {
+  //    gpio_put(LED_PIN, true);
+  //    sleep_ms(1000);
+  //    gpio_put(LED_PIN, false);
+  //    sleep_ms(1000);
+  //  }
+
+  queue_init(&tune_values_queue, sizeof(TuneValues), 5);
+  queue_init(&smps_parameters_queue, sizeof(SMPSParameters), 5);
 
   mutex_init(adc_mutex);
 
@@ -388,7 +514,7 @@ int main() {
 
   multicore_launch_core1(main1);
 
-//  pwm_manager.Initialize();
+  //  pwm_manager.Initialize();
 
   std::array<char, 512> buf{};
 
@@ -404,119 +530,117 @@ int main() {
   units::impedance::ohm_t out_shunt = 1_Ohm;
 
   while (true) {
+    //    auto cycle_start = get_cycle_count();
+    //    sleep_us(1);
+    //    auto cycle_end = get_cycle_count();
+    //    printf("Cycle count %i", cycle_end - cycle_start);
+    //    gpio_put(LED_PIN, true);
+    //    sleep_ms(1000);
+    //    gpio_put(LED_PIN, false);
+    //    sleep_ms(1000);
 
-
-//    auto cycle_start = get_cycle_count();
-//    sleep_us(1);
-//    auto cycle_end = get_cycle_count();
-//    printf("Cycle count %i", cycle_end - cycle_start);
-//    gpio_put(LED_PIN, true);
-//    sleep_ms(1000);
-//    gpio_put(LED_PIN, false);
-//    sleep_ms(1000);
-
-//    auto in_str = GetLine(buf, '\r');
-//    if (!in_str.empty()) {
-//      j = json::parse(in_str);
-//      if (j.contains("SMPS")) {
-//        if (j["SMPS"].contains("Duty")) pwm_manager.SMPSDuty(j["SMPS"]["Duty"]);
-//        if (j["SMPS"].contains("DeadBand")) pwm_manager.DeadBand(j["SMPS"]["DeadBand"]);
-//        if (j["SMPS"].contains("Frequency")) pwm_manager.SMPSFrequencyKHz(j["SMPS"]["Frequency"]);
-//      }
-//
-//      units::voltage::volt_t v_set_point = 0_V;
-//      if (FetchJSONValue(v_set_point, j, "SMPS", "SetPoint")) {
-//        FIFO_Push(MessageTypes::v_set_point);
-//        FIFO_Push(v_set_point.to<float>());
-//      }
-//
-//      units::voltage::volt_t v_in_offset = 0_V;
-//      if (FetchJSONValue(v_in_offset, j, "Sensor", "Tune", "Vin", "Offset")) {
-//        FIFO_Push(MessageTypes::v_in_offset);
-//        FIFO_Push(v_in_offset.to<float>());
-//      }
-//
-//      float v_in_multiplier = 1.0F;
-//      if (FetchJSONValue(v_in_multiplier, j, "Sensor", "Tune", "Vin", "Multiplier")) {
-//        FIFO_Push(MessageTypes::v_in_multiplier);
-//        FIFO_Push(v_in_multiplier);
-//      }
-//
-//      FetchJSONValue(v_out_offset, j, "Sensor", "Tune", "Vout", "Offset");
-//      FetchJSONValue(v_out_multiplier, j, "Sensor", "Tune", "Vout", "Multiplier");
-//
-//      FetchJSONValue(i_in_offset, j, "Sensor", "Tune", "Iin", "Offset");
-//      FetchJSONValue(i_in_gain, j, "Sensor", "Tune", "Iin", "Gain");
-//
-//      FetchJSONValue(i_out_offset, j, "Sensor", "Tune", "Iout", "Offset");
-//      FetchJSONValue(i_out_gain, j, "Sensor", "Tune", "Iout", "Gain");
-//
-//      FetchJSONValue(in_shunt, j, "Sensor", "Parameters", "In", "ShuntOhms");
-//
-//      FetchJSONValue(out_shunt, j, "Sensor", "Parameters", "Out", "ShuntOhms");
-//
-//
-//      //      if (j.contains("Sensor")) {
-//      //        if (j["Sensor"].contains("Vin")) {
-//      //          if (j["Sensor"]["Vin"].contains("Offset")) v_in_offset = j["Sensor"]["Vin"]["Offset"];
-//      //          if (j["Sensor"]["Vin"].contains("Multiplier")) v_in_multiplier = j["Sensor"]["Vin"]["Multiplier"];
-//      //        }
-//      //
-//      //        if (j["Sensor"].contains("Vout")) {
-//      //          if (j["Sensor"]["Vout"].contains("Offset")) v_out_offset = j["Sensor"]["Vout"]["Offset"];
-//      //          if (j["Sensor"]["Vout"].contains("Multiplier")) v_out_multiplier = j["Sensor"]["Vout"]["Multiplier"];
-//      //        }
-//      //
-//      //        if (j["Sensor"].contains("Iin")) {
-//      //          if (j["Sensor"]["Iin"].contains("Offset")) i_in_offset = j["Sensor"]["Iin"]["Offset"];
-//      //          if (j["Sensor"]["Iin"].contains("Gain")) i_in_gain = j["Sensor"]["Iin"]["Gain"];
-//      //        }
-//      //
-//      //        if (j["Sensor"].contains("Iout")) {
-//      //          if (j["Sensor"]["Iout"].contains("Offset")) i_out_offset = j["Sensor"]["Iout"]["Offset"];
-//      //          if (j["Sensor"]["Iout"].contains("Gain")) i_out_gain = j["Sensor"]["Iout"]["Gain"];
-//      //        }
-//      //      }
-//      if (j.contains("Control")) {
-//        CheckKeyThenCall(j["Control"], "LED", BuiltInLED);
-//      }
-//    }
-//    j.clear();
-//
-//    //    j["SMPS"]["In"]["Volts"] = ADCVoltage(ADC_Channels::voltage_in);
-//    //    j["SMPS"]["Out"]["Volts"] = ADCVoltage(ADC_Channels::voltage_out);
-//    //    j["SMPS"]["In"]["Amps"] = ADCCurrent(ADC_Channels::current_in, 100, i_in_offset, i_in_gain);
-//    //    j["SMPS"]["Out"]["Amps"] = ADCCurrent(ADC_Channels::current_out, 100, i_out_offset, i_out_gain);
-//
-//    for (size_t index = 0; index < averaging_array_size; ++index) {
-//      mutex_enter_blocking(adc_mutex);
-//      v_in_readings[index] = ADCRaw(ADC_Channels::voltage_in);
-//      v_out_readings[index] = ADCRaw(ADC_Channels::voltage_out);
-//      i_in_readings[index] = ADCRaw(ADC_Channels::current_in);
-//      i_out_readings[index] = ADCRaw(ADC_Channels::current_out);
-//      mutex_exit(adc_mutex);
-//      sleep_us(1);
-//    }
-//
-//    auto v_in_average = RawToVoltage(std::accumulate(v_in_readings.begin(), v_in_readings.end(), 0) / averaging_array_size);
-//    auto v_out_average = RawToVoltage(std::accumulate(v_out_readings.begin(), v_out_readings.end(), 0) / averaging_array_size);
-//    auto i_in_shunt_average = RawToVoltage(std::accumulate(i_in_readings.begin(), i_in_readings.end(), 0) / averaging_array_size);
-//    auto i_out_shunt_average = RawToVoltage(std::accumulate(i_out_readings.begin(), i_out_readings.end(), 0) / averaging_array_size);
-//
-//    //    auto raw = 0.0F;
-//    //    auto filtered = 0.0F;
-//    //    filtered = 0.99*filtered + 0.01*raw;
-//
-//    j["SMPS"]["In"]["Volts"] = v_in_average.to<float>();
-//    j["SMPS"]["In"]["Amps"] = VoltageToCurrent(i_in_shunt_average, in_shunt, i_in_offset, i_in_gain).to<float>();
-//    j["SMPS"]["Out"]["Volts"] = v_out_average.to<float>();
-//    j["SMPS"]["Out"]["Amps"] = VoltageToCurrent(i_out_shunt_average, out_shunt, i_out_offset, i_out_gain).to<float>();
-//
-//    j["System"]["TempC"] = CPUTemperature().to<float>();
-//    std::string json_str = j.dump();
-//    puts(json_str.data());
-//    j.clear();
-//
-//    sleep_ms(10);
+    //    auto in_str = GetLine(buf, '\r');
+    //    if (!in_str.empty()) {
+    //      j = json::parse(in_str);
+    //      if (j.contains("SMPS")) {
+    //        if (j["SMPS"].contains("Duty")) pwm_manager.SMPSDuty(j["SMPS"]["Duty"]);
+    //        if (j["SMPS"].contains("DeadBand")) pwm_manager.DeadBand(j["SMPS"]["DeadBand"]);
+    //        if (j["SMPS"].contains("Frequency")) pwm_manager.SMPSFrequencyKHz(j["SMPS"]["Frequency"]);
+    //      }
+    //
+    //      units::voltage::volt_t v_set_point = 0_V;
+    //      if (FetchJSONValue(v_set_point, j, "SMPS", "SetPoint")) {
+    //        FIFO_Push(MessageTypes::v_set_point);
+    //        FIFO_Push(v_set_point.to<float>());
+    //      }
+    //
+    //      units::voltage::volt_t v_in_offset = 0_V;
+    //      if (FetchJSONValue(v_in_offset, j, "Sensor", "Tune", "Vin", "Offset")) {
+    //        FIFO_Push(MessageTypes::v_in_offset);
+    //        FIFO_Push(v_in_offset.to<float>());
+    //      }
+    //
+    //      float v_in_multiplier = 1.0F;
+    //      if (FetchJSONValue(v_in_multiplier, j, "Sensor", "Tune", "Vin", "Multiplier")) {
+    //        FIFO_Push(MessageTypes::v_in_multiplier);
+    //        FIFO_Push(v_in_multiplier);
+    //      }
+    //
+    //      FetchJSONValue(v_out_offset, j, "Sensor", "Tune", "Vout", "Offset");
+    //      FetchJSONValue(v_out_multiplier, j, "Sensor", "Tune", "Vout", "Multiplier");
+    //
+    //      FetchJSONValue(i_in_offset, j, "Sensor", "Tune", "Iin", "Offset");
+    //      FetchJSONValue(i_in_gain, j, "Sensor", "Tune", "Iin", "Gain");
+    //
+    //      FetchJSONValue(i_out_offset, j, "Sensor", "Tune", "Iout", "Offset");
+    //      FetchJSONValue(i_out_gain, j, "Sensor", "Tune", "Iout", "Gain");
+    //
+    //      FetchJSONValue(in_shunt, j, "Sensor", "Parameters", "In", "ShuntOhms");
+    //
+    //      FetchJSONValue(out_shunt, j, "Sensor", "Parameters", "Out", "ShuntOhms");
+    //
+    //
+    //      //      if (j.contains("Sensor")) {
+    //      //        if (j["Sensor"].contains("Vin")) {
+    //      //          if (j["Sensor"]["Vin"].contains("Offset")) v_in_offset = j["Sensor"]["Vin"]["Offset"];
+    //      //          if (j["Sensor"]["Vin"].contains("Multiplier")) v_in_multiplier = j["Sensor"]["Vin"]["Multiplier"];
+    //      //        }
+    //      //
+    //      //        if (j["Sensor"].contains("Vout")) {
+    //      //          if (j["Sensor"]["Vout"].contains("Offset")) v_out_offset = j["Sensor"]["Vout"]["Offset"];
+    //      //          if (j["Sensor"]["Vout"].contains("Multiplier")) v_out_multiplier = j["Sensor"]["Vout"]["Multiplier"];
+    //      //        }
+    //      //
+    //      //        if (j["Sensor"].contains("Iin")) {
+    //      //          if (j["Sensor"]["Iin"].contains("Offset")) i_in_offset = j["Sensor"]["Iin"]["Offset"];
+    //      //          if (j["Sensor"]["Iin"].contains("Gain")) i_in_gain = j["Sensor"]["Iin"]["Gain"];
+    //      //        }
+    //      //
+    //      //        if (j["Sensor"].contains("Iout")) {
+    //      //          if (j["Sensor"]["Iout"].contains("Offset")) i_out_offset = j["Sensor"]["Iout"]["Offset"];
+    //      //          if (j["Sensor"]["Iout"].contains("Gain")) i_out_gain = j["Sensor"]["Iout"]["Gain"];
+    //      //        }
+    //      //      }
+    //      if (j.contains("Control")) {
+    //        CheckKeyThenCall(j["Control"], "LED", BuiltInLED);
+    //      }
+    //    }
+    //    j.clear();
+    //
+    //    //    j["SMPS"]["In"]["Volts"] = ADCVoltage(ADC_Channels::voltage_in);
+    //    //    j["SMPS"]["Out"]["Volts"] = ADCVoltage(ADC_Channels::voltage_out);
+    //    //    j["SMPS"]["In"]["Amps"] = ADCCurrent(ADC_Channels::current_in, 100, i_in_offset, i_in_gain);
+    //    //    j["SMPS"]["Out"]["Amps"] = ADCCurrent(ADC_Channels::current_out, 100, i_out_offset, i_out_gain);
+    //
+    //    for (size_t index = 0; index < averaging_array_size; ++index) {
+    //      mutex_enter_blocking(adc_mutex);
+    //      v_in_readings[index] = ADCRaw(ADC_Channels::voltage_in);
+    //      v_out_readings[index] = ADCRaw(ADC_Channels::voltage_out);
+    //      i_in_readings[index] = ADCRaw(ADC_Channels::current_in);
+    //      i_out_readings[index] = ADCRaw(ADC_Channels::current_out);
+    //      mutex_exit(adc_mutex);
+    //      sleep_us(1);
+    //    }
+    //
+    //    auto v_in_average = RawToVoltage(std::accumulate(v_in_readings.begin(), v_in_readings.end(), 0) / averaging_array_size);
+    //    auto v_out_average = RawToVoltage(std::accumulate(v_out_readings.begin(), v_out_readings.end(), 0) / averaging_array_size);
+    //    auto i_in_shunt_average = RawToVoltage(std::accumulate(i_in_readings.begin(), i_in_readings.end(), 0) / averaging_array_size);
+    //    auto i_out_shunt_average = RawToVoltage(std::accumulate(i_out_readings.begin(), i_out_readings.end(), 0) / averaging_array_size);
+    //
+    //    //    auto raw = 0.0F;
+    //    //    auto filtered = 0.0F;
+    //    //    filtered = 0.99*filtered + 0.01*raw;
+    //
+    //    j["SMPS"]["In"]["Volts"] = v_in_average.to<float>();
+    //    j["SMPS"]["In"]["Amps"] = VoltageToCurrent(i_in_shunt_average, in_shunt, i_in_offset, i_in_gain).to<float>();
+    //    j["SMPS"]["Out"]["Volts"] = v_out_average.to<float>();
+    //    j["SMPS"]["Out"]["Amps"] = VoltageToCurrent(i_out_shunt_average, out_shunt, i_out_offset, i_out_gain).to<float>();
+    //
+    //    j["System"]["TempC"] = CPUTemperature().to<float>();
+    //    std::string json_str = j.dump();
+    //    puts(json_str.data());
+    //    j.clear();
+    //
+    //    sleep_ms(10);
   }
 }
