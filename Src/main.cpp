@@ -25,6 +25,8 @@
 #include "units.h"
 using namespace units::literals;
 
+#include "fmt/core.h"
+
 constexpr auto LED_PIN = PICO_DEFAULT_LED_PIN;
 constexpr auto MONITOR_PIN = 2;
 //constexpr auto LED_PIN = 13;
@@ -500,6 +502,11 @@ int main() {
   //    sleep_ms(1000);
   //  }
 
+  uart_init(uart1, 115200);
+
+  gpio_set_function(4, GPIO_FUNC_UART);
+  gpio_set_function(5, GPIO_FUNC_UART);
+
   queue_init(&tune_values_queue, sizeof(TuneValues), 5);
   queue_init(&smps_parameters_queue, sizeof(SMPSParameters), 5);
 
@@ -530,6 +537,9 @@ int main() {
   units::impedance::ohm_t out_shunt = 1_Ohm;
 
   while (true) {
+    uart_putc(uart1, 'B');
+    sleep_ms(1000);
+
     //    auto cycle_start = get_cycle_count();
     //    sleep_us(1);
     //    auto cycle_end = get_cycle_count();

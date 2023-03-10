@@ -20,6 +20,8 @@ add_compile_options(-Wall
         -Wno-maybe-uninitialized
         )
 
+add_link_options(-Wl,-gc-sections,--print-memory-usage)
+
 if (TARGET tinyusb_device)
     add_executable(FirstBoost Src/main.cpp)
 
@@ -42,6 +44,9 @@ if (TARGET tinyusb_device)
 
     add_subdirectory(Inc/units)
     target_include_directories(FirstBoost PUBLIC Inc/units/include)
+
+    add_subdirectory(Inc/FMT)
+    target_link_libraries(FirstBoost fmt)
 elseif (PICO_ON_DEVICE)
     message(WARNING "not building hello_usb because TinyUSB submodule is not initialized in the SDK")
 endif ()
