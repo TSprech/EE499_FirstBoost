@@ -536,8 +536,14 @@ int main() {
   units::impedance::ohm_t in_shunt = 1_Ohm;
   units::impedance::ohm_t out_shunt = 1_Ohm;
 
+  std::array<char, 128> fmt_buf{};
   while (true) {
-    uart_putc(uart1, 'B');
+    fmt::format_to(fmt_buf.begin(), "This is a test: {} {}", 9000, 3.14F);
+
+    char* data = fmt_buf.begin();
+    while(*data != '\0') {
+      uart_putc(uart1, *data++);
+    }
     sleep_ms(1000);
 
     //    auto cycle_start = get_cycle_count();
