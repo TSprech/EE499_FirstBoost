@@ -106,7 +106,7 @@ int main() {
 
       float duty = 0;
       if (FetchJSONValue(duty, j, "SMPS", "Duty")) {
-        SMPSParameters parameters{.user_duty = duty};
+        SMPSParameters parameters{.user_duty = duty / 100.0F}; // Divide the duty by 100 to make it in the range of 0 - 1
         queue_try_add(&smps_parameters_queue, &parameters);
       }
 
@@ -225,12 +225,19 @@ int main() {
 //      j["System"]["Queues"]["SensorData"]["MaxSize"] = (&sensor_data_queue);
 
 //      j["System"]["Message"] = buf;
+    }
 
+    Core1MiscData misc_data{};
+    while (queue_try_remove(&core_1_misc_data_queue, &misc_data)) {
+      j["SMPS"]["Duty"] = misc_data.duty;
+      j["System"]["TempC"] = misc_data.cpu_temperature.to<float>();
+    }
+
+    if (!j.empty()) {
       std::string json_str = j.dump();
       puts(json_str.data());
     }
 
-    //    j["System"]["TempC"] = CPUTemperature().to<float>();
     j.clear();
 
     sleep_ms(50);

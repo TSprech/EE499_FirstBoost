@@ -105,24 +105,24 @@ bool FeedbackLoop(repeating_timer_t* rt) {
   auto i_out_average = AverageCurrentFromQueue(i_out_samples_queue, i_out_tune.shunt.value(), i_out_tune.offset.value(), i_out_tune.gain.value());
 
   static float duty_integrated = 0.0F;  // Used for the I calculations of the PI loop
+  float duty = 0.0F;
 
   if (smps_parameters.enable.value() && smps_parameters.pi_loop_enable.value()) {  // SMPS enabled and PI loop enabled
-    constexpr float duty_max = 90.0F;                                              // The max duty cycle the PI loop will every try to output
-    constexpr float duty_min = 20.0F;                                              // The min duty cycle the PI loop will every try to output
+    constexpr float duty_max = 0.90F;                                              // The max duty cycle the PI loop will every try to output
+    constexpr float duty_min = 0.20F;                                              // The min duty cycle the PI loop will every try to output
     constexpr float k_p = 0.1F;                                                    // KP constant for the PI compensation
-    constexpr float k_i = 20.0F;                                                   // KI constant for the PI compensation
+    constexpr float k_i = 2.0F;                                                   // KI constant for the PI compensation
 
     auto error = smps_parameters.v_out_set_point.value() - v_out_average;  // Calculate the error between desired voltage and output voltage
 
-    float duty = k_p * error.to<float>() + duty_integrated;
+    duty = k_p * error.to<float>() + duty_integrated;
     duty = std::clamp(duty, duty_min, duty_max);
 
     duty_integrated += k_i * error.to<float>() * period.to<float>();
     duty_integrated = std::clamp(duty_integrated, duty_min, duty_max);
 
     static auto last_duty = duty;
-    pwm_manager.SMPSDuty(duty);
-    if (std::abs(duty - last_duty) > 2) {
+    if (std::abs(duty - last_duty) > 0.02F) {
       FMTDebug("Setting PI duty cycle: {}%\n", duty);
       last_duty = duty;
     }
@@ -132,15 +132,17 @@ bool FeedbackLoop(repeating_timer_t* rt) {
 
   if (smps_parameters.enable.value() && !smps_parameters.pi_loop_enable.value()) {
     static auto last_duty = smps_parameters.user_duty.value();
-    pwm_manager.SMPSDuty(smps_parameters.user_duty.value());
-    if (smps_parameters.user_duty.value() != last_duty) {
-      FMTDebug("Setting user duty cycle: {}%\n", smps_parameters.user_duty.value());
-      last_duty = smps_parameters.user_duty.value();
+    duty = smps_parameters.user_duty.value();
+    if (duty != last_duty) {
+      FMTDebug("Setting user duty cycle: {}%\n", duty);
+      last_duty = duty;
     }
   }
   if (!smps_parameters.enable.value() && !smps_parameters.pi_loop_enable.value()) {
-    pwm_manager.SMPSDuty(0);
+    duty = 0;
   }
+
+  pwm_manager.SMPSDuty(duty);
 
   SensorData sensor_data{
       .v_in = v_in_average,
@@ -148,8 +150,14 @@ bool FeedbackLoop(repeating_timer_t* rt) {
       .v_out = v_out_average,
       .i_out = i_out_average,
   };
-
   queue_try_add(&sensor_data_queue, &sensor_data);
+
+  Core1MiscData misc_data{
+      .duty = duty,
+      .cpu_temperature = CPUTemperature(),
+  };
+  queue_try_add(&core_1_misc_data_queue, &misc_data);
+
   gpio_put(MONITOR_PIN, false);
   return true;  // Return true to repeat the timer
 }
@@ -182,6 +190,8 @@ void main1() {
   queue_init(&i_in_samples_queue, sizeof(uint16_t), queue_length);
   queue_init(&v_out_samples_queue, sizeof(uint16_t), queue_length);
   queue_init(&i_out_samples_queue, sizeof(uint16_t), queue_length);
+
+  queue_init(&core_1_misc_data_queue, sizeof(Core1MiscData), 10);
 
   pwm_manager.Initialize();
 

@@ -63,26 +63,27 @@ struct PWMManager {
     pwm_set_both_levels(slice_number_, a_level, b_level);
   }
 
-  auto SMPSDuty(float duty_cycle_percentage) {
-    //    duty = duty_cycle_percentage / 100;
+  /**
+   * @brief Changes the duty cycle of the A and B channels of the PWM channel.
+   * @param duty_cycle The duty cycle represented as a values between 0 and 1.
+   */
+  auto SMPSDuty(float duty_cycle) const -> void {
+    //    duty = duty_cycle / 100;
     auto top = Top();
-    uint16_t a_level = 0;
-    uint16_t b_level = 0;
-    if (duty_cycle_percentage < 1) {
+    uint16_t a_level;
+    uint16_t b_level;
+    if (duty_cycle < 0.01) {
       a_level = 0;
       b_level = 0;
-    } else if (duty_cycle_percentage > 99) {
+    } else if (duty_cycle > 0.99) {
       a_level = top;
       b_level = top;
     } else {
-      a_level = std::floor(top * (duty_cycle_percentage / 100));
+      a_level = std::floor(static_cast<float>(top) * duty_cycle);
       b_level = a_level;
       a_level -= deadband_;
       b_level += deadband_;
     }
-
-    //    pwm_a = a_level;
-    //    pwm_b = b_level;
 
     pwm_set_both_levels(slice_number_, a_level, b_level);
   }
@@ -125,6 +126,7 @@ inline queue_t i_out_samples_queue;
 inline queue_t tune_values_queue;
 inline queue_t smps_parameters_queue;
 inline queue_t sensor_data_queue;
+inline queue_t core_1_misc_data_queue;
 
 struct VTune {
   std::optional<units::voltage::volt_t> offset;
@@ -156,6 +158,11 @@ struct SensorData {
   units::current::ampere_t i_in;
   units::voltage::volt_t v_out;
   units::current::ampere_t i_out;
+};
+
+struct Core1MiscData {
+  float duty;
+  units::temperature::celsius_t cpu_temperature;
 };
 
 inline constexpr auto rate = 100_Hz;                       // Whatever the PI loop call rate will be
