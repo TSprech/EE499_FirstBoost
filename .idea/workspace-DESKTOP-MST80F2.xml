@@ -1,0 +1,146 @@
+<?xml version="1.0" encoding="UTF-8"?>
+<project version="4">
+  <component name="AutoImportSettings">
+    <option name="autoReloadType" value="SELECTIVE" />
+  </component>
+  <component name="CMakePresetLoader">{
+  &quot;useNewFormat&quot;: true
+}</component>
+  <component name="CMakeReloadState">
+    <option name="reloaded" value="true" />
+  </component>
+  <component name="CMakeRunConfigurationManager">
+    <generated>
+      <config projectName="FirstBoost" targetName="bs2_default_padded_checksummed_asm" />
+      <config projectName="FirstBoost" targetName="cyw43_firmware_package" />
+      <config projectName="FirstBoost" targetName="bs2_default_bin" />
+      <config projectName="FirstBoost" targetName="PioasmBuild" />
+      <config projectName="FirstBoost" targetName="ELF2UF2Build" />
+      <config projectName="FirstBoost" targetName="bs2_default" />
+      <config projectName="FirstBoost" targetName="fmt" />
+      <config projectName="FirstBoost" targetName="FirstBoost" />
+      <config projectName="FirstBoost" targetName="cyw43_driver_picow_cyw43_bus_pio_spi_pio_h" />
+    </generated>
+  </component>
+  <component name="CMakeSettings">
+    <configurations />
+  </component>
+  <component name="ChangeListManager">
+    <list default="true" id="80b913f1-192a-4c77-938c-f1a5c798c704" name="Changes" comment="" />
+    <option name="SHOW_DIALOG" value="false" />
+    <option name="HIGHLIGHT_CONFLICTS" value="true" />
+    <option name="HIGHLIGHT_NON_ACTIVE_CHANGELIST" value="false" />
+    <option name="LAST_RESOLUTION" value="IGNORE" />
+  </component>
+  <component name="ExecutionTargetManager" SELECTED_TARGET="CMakeBuildProfile:Debug" />
+  <component name="FileTemplateManagerImpl">
+    <option name="RECENT_TEMPLATES">
+      <list>
+        <option value="Python Script" />
+      </list>
+    </option>
+  </component>
+  <component name="MarkdownSettingsMigration">
+    <option name="stateVersion" value="1" />
+  </component>
+  <component name="ProjectId" id="2Le9SjurRTdGjxWafkYfr82aOI3" />
+  <component name="ProjectViewState">
+    <option name="hideEmptyMiddlePackages" value="true" />
+    <option name="showLibraryContents" value="true" />
+  </component>
+  <component name="PropertiesComponent"><![CDATA[{
+  "keyToString": {
+    "RunOnceActivity.OpenProjectViewOnStart": "true",
+    "RunOnceActivity.ShowReadmeOnStart": "true",
+    "RunOnceActivity.cidr.known.project.marker": "true",
+    "WebServerToolWindowFactoryState": "false",
+    "cf.advertisement.text.overridden": "true",
+    "cf.first.check.clang-format": "false",
+    "cidr.known.project.marker": "true",
+    "last_opened_file_path": "C:/Users/treys/OneDrive/Documents/KU_No_Spaces/EE499/EE499_FirstBoost/Inc/FMT",
+    "node.js.detected.package.eslint": "true",
+    "node.js.detected.package.tslint": "true",
+    "node.js.selected.package.eslint": "(autodetect)",
+    "node.js.selected.package.tslint": "(autodetect)",
+    "settings.editor.selected.configurable": "serialmonitor.settings",
+    "structure.view.defaults.are.configured": "true",
+    "vue.rearranger.settings.migration": "true"
+  }
+}]]></component>
+  <component name="RecentsManager">
+    <key name="CopyFile.RECENT_KEYS">
+      <recent name="C:\Users\treys\OneDrive\Documents\KU_No_Spaces\EE499\EE499_FirstBoost\Inc\FMT" />
+      <recent name="C:\Users\treys\OneDrive\Documents\KU_No_Spaces\EE499\EE499_FirstBoost\Inc" />
+      <recent name="C:\Users\treys\OneDrive\Documents\Kettering University - KU\Winter 2023\EE 499\EE499_FirstBoost\Inc" />
+    </key>
+  </component>
+  <component name="RunManager" selected="Python.EventBusTest">
+    <configuration default="true" type="CLionExternalRunConfiguration" factoryName="Application" REDIRECT_INPUT="false" ELEVATE="false" USE_EXTERNAL_CONSOLE="false" PASS_PARENT_ENVS_2="true">
+      <method v="2">
+        <option name="CLION.EXTERNAL.BUILD" enabled="true" />
+      </method>
+    </configuration>
+    <configuration name="fmt" type="CMakeRunConfiguration" factoryName="Application" REDIRECT_INPUT="false" ELEVATE="false" USE_EXTERNAL_CONSOLE="false" PASS_PARENT_ENVS_2="true" PROJECT_NAME="FirstBoost" TARGET_NAME="fmt" CONFIG_NAME="Debug">
+      <method v="2">
+        <option name="com.jetbrains.cidr.execution.CidrBuildBeforeRunTaskProvider$BuildBeforeRunTask" enabled="true" />
+      </method>
+    </configuration>
+    <configuration name="FirstBoost" type="com.jetbrains.cidr.embedded.openocd.conf.type" factoryName="com.jetbrains.cidr.embedded.openocd.conf.factory" REDIRECT_INPUT="false" ELEVATE="false" USE_EXTERNAL_CONSOLE="false" PASS_PARENT_ENVS_2="true" PROJECT_NAME="FirstBoost" TARGET_NAME="ELF2UF2Build" CONFIG_NAME="Debug" version="1" RUN_TARGET_PROJECT_NAME="FirstBoost" RUN_TARGET_NAME="FirstBoost">
+      <openocd version="1" gdb-port="3333" telnet-port="4444" board-config="C:\Users\treys\OneDrive\Documents\KU_No_Spaces\EE499\EE499_FirstBoost\pico-debug.cfg" reset-type="INIT" download-type="ALWAYS">
+        <debugger kind="GDB" isBundled="true" />
+      </openocd>
+      <method v="2">
+        <option name="CLION.COMPOUND.BUILD" enabled="true" />
+      </method>
+    </configuration>
+    <list>
+      <item itemvalue="CMake Application.bs2_default" />
+      <item itemvalue="CMake Application.bs2_default_bin" />
+      <item itemvalue="CMake Application.bs2_default_padded_checksummed_asm" />
+      <item itemvalue="CMake Application.cyw43_driver_picow_cyw43_bus_pio_spi_pio_h" />
+      <item itemvalue="CMake Application.cyw43_firmware_package" />
+      <item itemvalue="CMake Application.ELF2UF2Build" />
+      <item itemvalue="CMake Application.FirstBoost" />
+      <item itemvalue="CMake Application.fmt" />
+      <item itemvalue="CMake Application.PioasmBuild" />
+      <item itemvalue="OpenOCD Download &amp; Run.FirstBoost" />
+      <item itemvalue="Python.EventBusTest" />
+    </list>
+  </component>
+  <component name="SpellCheckerSettings" RuntimeDictionaries="0" Folders="0" CustomDictionaries="0" DefaultDictionary="application-level" UseSingleDictionary="true" transferred="true" />
+  <component name="TaskManager">
+    <task active="true" id="Default" summary="Default task">
+      <changelist id="80b913f1-192a-4c77-938c-f1a5c798c704" name="Changes" comment="" />
+      <created>1676220685949</created>
+      <option name="number" value="Default" />
+      <option name="presentableId" value="Default" />
+      <updated>1676220685949</updated>
+      <workItem from="1676220688634" duration="29666000" />
+      <workItem from="1676385429247" duration="5434000" />
+      <workItem from="1676564449610" duration="8206000" />
+      <workItem from="1676578726157" duration="10443000" />
+      <workItem from="1677808336786" duration="23090000" />
+      <workItem from="1678057979785" duration="7265000" />
+      <workItem from="1678194680700" duration="1647000" />
+      <workItem from="1678197963801" duration="682000" />
+      <workItem from="1678198727794" duration="6497000" />
+      <workItem from="1678214837127" duration="5467000" />
+      <workItem from="1678246313324" duration="607000" />
+      <workItem from="1678288846052" duration="15025000" />
+      <workItem from="1678408688953" duration="3741000" />
+      <workItem from="1678412707078" duration="1401000" />
+      <workItem from="1678414137835" duration="120000" />
+      <workItem from="1678414270756" duration="3630000" />
+      <workItem from="1678417986763" duration="2763000" />
+      <workItem from="1678456435754" duration="13148000" />
+    </task>
+    <servers />
+  </component>
+  <component name="TypeScriptGeneratedFilesManager">
+    <option name="version" value="3" />
+  </component>
+  <component name="XSLT-Support.FileAssociations.UIState">
+    <expand />
+    <select />
+  </component>
+</project>

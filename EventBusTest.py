@@ -17,7 +17,7 @@ v_in_offset = 0.0
 v_in_multiplier = 2.0
 
 v_out_offset = 0.0
-v_out_multiplier = 1.0
+v_out_multiplier = 10.0
 
 i_in_offset = 1.65
 i_in_gain = 1.0

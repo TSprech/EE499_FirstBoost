@@ -23,7 +23,7 @@ add_compile_options(-Wall
 add_link_options(-Wl,-gc-sections,--print-memory-usage)
 
 if (TARGET tinyusb_device)
-    add_executable(FirstBoost Src/main.cpp)
+    add_executable(FirstBoost Src/main.cpp Src/main1.cpp)
 
     # enable usb output, disable uart output
     pico_enable_stdio_usb(FirstBoost 1)

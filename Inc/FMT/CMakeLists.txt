@@ -7,3 +7,4 @@ add_compile_definitions(FMT_USE_DOUBLE=0)
 add_compile_definitions(FMT_USE_LONG_DOUBLE=0)
 
 add_subdirectory(fmt)
+include_directories(${CMAKE_CURRENT_SOURCE_DIR})
