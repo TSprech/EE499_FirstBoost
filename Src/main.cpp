@@ -200,38 +200,38 @@ int main() {
       j["SMPS"]["In"]["Amps"] = sensor_data.i_in.to<float>();
       j["SMPS"]["Out"]["Volts"] = sensor_data.v_out.to<float>();
       j["SMPS"]["Out"]["Amps"] = sensor_data.i_out.to<float>();
-//      std::string buf{};
-//      fmt::format_to(std::back_inserter(buf), "v_in_samples_queue: {}\n", queue_get_level(&v_in_samples_queue));
-//      fmt::format_to(std::back_inserter(buf), "i_in_samples_queue: {}\n", queue_get_level(&i_in_samples_queue));
-//      fmt::format_to(std::back_inserter(buf), "v_out_samples_queue: {}\n", queue_get_level(&v_out_samples_queue));
-//      fmt::format_to(std::back_inserter(buf), "i_out_samples_queue: {}\n", queue_get_level(&i_out_samples_queue));
-//      fmt::format_to(std::back_inserter(buf), "tune_values_queue: {}\n", queue_get_level(&tune_values_queue));
-//      fmt::format_to(std::back_inserter(buf), "smps_parameters_queue: {}\n", queue_get_level(&smps_parameters_queue));
-//      fmt::format_to(std::back_inserter(buf), "sensor_data_queue: {}\n", queue_get_level(&sensor_data_queue));
+      std::string buf_str{};
+      fmt::format_to(std::back_inserter(buf_str), "v_in_samples_queue: {}\n", queue_get_level(&v_in_samples_queue));
+      fmt::format_to(std::back_inserter(buf_str), "i_in_samples_queue: {}\n", queue_get_level(&i_in_samples_queue));
+      fmt::format_to(std::back_inserter(buf_str), "v_out_samples_queue: {}\n", queue_get_level(&v_out_samples_queue));
+      fmt::format_to(std::back_inserter(buf_str), "i_out_samples_queue: {}\n", queue_get_level(&i_out_samples_queue));
+      fmt::format_to(std::back_inserter(buf_str), "tune_values_queue: {}\n", queue_get_level(&tune_values_queue));
+      fmt::format_to(std::back_inserter(buf_str), "smps_parameters_queue: {}\n", queue_get_level(&smps_parameters_queue));
+      fmt::format_to(std::back_inserter(buf_str), "sensor_data_queue: {}\n\0", queue_get_level(&sensor_data_queue));
 
-      j["System"]["Queues"]["VIn"]["Level"] = queue_get_level(&v_in_samples_queue);
-//      j["System"]["Queues"]["VIn"]["MaxSize"] = (&v_in_samples_queue);
-      j["System"]["Queues"]["IIn"]["Level"] = queue_get_level(&i_in_samples_queue);
-//      j["System"]["Queues"]["IIn"]["MaxSize"] = (&i_in_samples_queue);
-      j["System"]["Queues"]["VOut"]["Level"] = queue_get_level(&v_out_samples_queue);
-//      j["System"]["Queues"]["VOut"]["MaxSize"] = (&v_out_samples_queue);
-      j["System"]["Queues"]["IOut"]["Level"] = queue_get_level(&i_out_samples_queue);
-//      j["System"]["Queues"]["IOut"]["MaxSize"] = (&i_out_samples_queue);
-      j["System"]["Queues"]["TuneValues"]["Level"] = queue_get_level(&tune_values_queue);
-//      j["System"]["Queues"]["TuneValues"]["MaxSize"] = (&tune_values_queue);
-      j["System"]["Queues"]["SMPSParameters"]["Level"] = queue_get_level(&smps_parameters_queue);
-//      j["System"]["Queues"]["SMPSParameters"]["MaxSize"] = (&smps_parameters_queue);
-      j["System"]["Queues"]["SensorData"]["Level"] = queue_get_level(&sensor_data_queue);
-//      j["System"]["Queues"]["SensorData"]["MaxSize"] = (&sensor_data_queue);
+//      j["System"]["Queues"]["VIn"]["Level"] = queue_get_level(&v_in_samples_queue);
+////      j["System"]["Queues"]["VIn"]["MaxSize"] = (&v_in_samples_queue);
+//      j["System"]["Queues"]["IIn"]["Level"] = queue_get_level(&i_in_samples_queue);
+////      j["System"]["Queues"]["IIn"]["MaxSize"] = (&i_in_samples_queue);
+//      j["System"]["Queues"]["VOut"]["Level"] = queue_get_level(&v_out_samples_queue);
+////      j["System"]["Queues"]["VOut"]["MaxSize"] = (&v_out_samples_queue);
+//      j["System"]["Queues"]["IOut"]["Level"] = queue_get_level(&i_out_samples_queue);
+////      j["System"]["Queues"]["IOut"]["MaxSize"] = (&i_out_samples_queue);
+//      j["System"]["Queues"]["TuneValues"]["Level"] = queue_get_level(&tune_values_queue);
+////      j["System"]["Queues"]["TuneValues"]["MaxSize"] = (&tune_values_queue);
+//      j["System"]["Queues"]["SMPSParameters"]["Level"] = queue_get_level(&smps_parameters_queue);
+////      j["System"]["Queues"]["SMPSParameters"]["MaxSize"] = (&smps_parameters_queue);
+//      j["System"]["Queues"]["SensorData"]["Level"] = queue_get_level(&sensor_data_queue);
+////      j["System"]["Queues"]["SensorData"]["MaxSize"] = (&sensor_data_queue);
 
-//      j["System"]["Message"] = buf;
+      j["System"]["Message"] = buf_str;
     }
 
-    Core1MiscData misc_data{};
-    while (queue_try_remove(&core_1_misc_data_queue, &misc_data)) {
-      j["SMPS"]["Duty"] = misc_data.duty;
-      j["System"]["TempC"] = misc_data.cpu_temperature.to<float>();
-    }
+//    Core1MiscData misc_data{};
+//    while (queue_try_remove(&core_1_misc_data_queue, &misc_data)) {
+//      j["SMPS"]["Duty"] = misc_data.duty;
+//      j["System"]["TempC"] = misc_data.cpu_temperature.to<float>();
+//    }
 
     if (!j.empty()) {
       std::string json_str = j.dump();
@@ -240,6 +240,6 @@ int main() {
 
     j.clear();
 
-    sleep_ms(50);
+    sleep_ms(2);
   }
 }

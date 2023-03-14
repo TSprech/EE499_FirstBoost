@@ -20,9 +20,31 @@
 #include "units.h"
 using namespace units::literals;
 
+#include "FMT/FMTToUART.hpp"
+
+#include "hardware/clocks.h"
+
+#include "TypedUnits.hpp"
+
+/**
+ * @brief A constexpr version of pwm_gpio_to_slice_num.
+ * @param gpio
+ * @returns
+ */
+inline constexpr auto PWMGPIOToSliceNum(uint gpio) {
+  return (gpio >> 1u) & 7u;
+}
+
+inline auto CPUFrequency() -> units::frequency::hertz_u32_t {
+  return units::frequency::hertz_u32_t{clock_get_hz(clk_sys)};
+}
+
 struct PWMManager {
-  explicit PWMManager(uint8_t slice_number)
-      : slice_number_(slice_number) {}
+//  explicit PWMManager(uint8_t slice_number)
+//      : slice_number_(slice_number) {}
+
+  constexpr PWMManager(uint8_t a_pin, uint8_t b_pin)
+      : slice_number_(PWMGPIOToSliceNum(a_pin)), a_pin_(a_pin), b_pin_(b_pin) {}
 
   [[nodiscard]] auto Top() const -> uint32_t {
     return pwm_hw->slice[slice_number_].top;
@@ -37,16 +59,15 @@ struct PWMManager {
   //    return ;
   //  }
 
-  auto SMPSFrequencyKHz(uint16_t freq_khz) {
-    constexpr auto f_sys_khz = 125000000 / 1000;
-    auto top = (f_sys_khz / freq_khz / 2) - 1;
+  auto SMPSFrequency(units::frequency::hertz_u32_t frequency) {
+    auto top = (CPUFrequency() / frequency / 2) - 1;
     pwm_set_wrap(slice_number_, top);
   }
 
-  auto SMPSFrequencyKHz() -> uint16_t {
-    constexpr auto f_sys_khz = 125000000 / 1000;
-    return 1 / ((Top() + 1) * 2 / f_sys_khz);
-  }
+//  auto SMPSFrequencyKHz() -> uint16_t {
+//    constexpr auto f_sys_khz = 125000000 / 1000;
+//    return 1 / ((Top() + 1) * 2 / f_sys_khz);
+//  }
 
   auto SimpleDuty(uint16_t duty_cycle) {
     auto top = Top();
@@ -89,18 +110,22 @@ struct PWMManager {
   }
 
   auto Initialize() -> void {
+    if (PWMGPIOToSliceNum(a_pin_) != PWMGPIOToSliceNum(b_pin_)) {
+      FMTDebug("A and B PWM pins are not part of the same slice, this means they will not switch synchronously\n");
+    }
+
     // Tell GPIO 0 and 1 they are allocated to the PWM
-    gpio_set_function(0, GPIO_FUNC_PWM);
-    gpio_set_function(1, GPIO_FUNC_PWM);
+    gpio_set_function(a_pin_, GPIO_FUNC_PWM);
+    gpio_set_function(b_pin_, GPIO_FUNC_PWM);
 
-    gpio_disable_pulls(0);
-    gpio_disable_pulls(1);
+    gpio_disable_pulls(a_pin_);
+    gpio_disable_pulls(b_pin_);
 
-    gpio_set_slew_rate(0, GPIO_SLEW_RATE_FAST);
-    gpio_set_slew_rate(1, GPIO_SLEW_RATE_FAST);
+    gpio_set_slew_rate(a_pin_, GPIO_SLEW_RATE_FAST);
+    gpio_set_slew_rate(b_pin_, GPIO_SLEW_RATE_FAST);
 
-    gpio_set_drive_strength(0, GPIO_DRIVE_STRENGTH_12MA);
-    gpio_set_drive_strength(1, GPIO_DRIVE_STRENGTH_12MA);
+    gpio_set_drive_strength(a_pin_, GPIO_DRIVE_STRENGTH_12MA);
+    gpio_set_drive_strength(b_pin_, GPIO_DRIVE_STRENGTH_12MA);
 
     pwm_set_wrap(slice_number_, 625 - 1);
     //    //  pwm_set_both_levels(slice, 5000, 1250);
@@ -113,10 +138,12 @@ struct PWMManager {
   }
 
   const uint8_t slice_number_;
+  const uint8_t a_pin_;
+  const uint8_t b_pin_;
   uint16_t deadband_ = 24;
 };
 
-inline PWMManager pwm_manager(pwm_gpio_to_slice_num(0));
+inline PWMManager pwm_manager(0, 1);
 
 inline queue_t v_in_samples_queue;
 inline queue_t i_in_samples_queue;
@@ -165,7 +192,7 @@ struct Core1MiscData {
   units::temperature::celsius_t cpu_temperature;
 };
 
-inline constexpr auto rate = 100_Hz;                       // Whatever the PI loop call rate will be
+inline constexpr auto rate = 50_Hz;                       // Whatever the PI loop call rate will be
 inline constexpr units::time::second_t period = 1 / rate;  // Convert the Hz to period
 inline constexpr auto MONITOR_PIN = 2;
 

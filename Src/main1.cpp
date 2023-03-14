@@ -23,6 +23,7 @@
  */
 bool FeedbackLoop(repeating_timer_t* rt) {
   gpio_put(MONITOR_PIN, true);  // Used to time how long the function takes
+//  uart_putc(uart1, '0');
 
   static VTune v_in_tune = {
       // The tune values for the input voltage sensor
@@ -85,6 +86,7 @@ bool FeedbackLoop(repeating_timer_t* rt) {
     if (ExtractGain(tune.i_out_tune, i_out_tune.gain))
       FMTDebug("I out gain changed: {}\n", i_out_tune.gain.value());
   }
+//  uart_putc(uart1, '1');
 
   SMPSParameters parameters{};
   while (queue_try_remove(&smps_parameters_queue, &parameters)) {
@@ -97,12 +99,14 @@ bool FeedbackLoop(repeating_timer_t* rt) {
     if (ExtractPILoopEnable(parameters, smps_parameters.pi_loop_enable))
       FMTDebug("PI Loop is now {}\n", (smps_parameters.pi_loop_enable.value() ? "enabled" : "disabled"));
   }
+//  uart_putc(uart1, '2');
 
   // Average all the raw values and apply corrective tune values
   auto v_in_average = AverageVoltageFromQueue(v_in_samples_queue, v_in_tune.offset.value(), v_in_tune.multiplier.value());
   auto i_in_average = AverageCurrentFromQueue(i_in_samples_queue, i_in_tune.shunt.value(), i_in_tune.offset.value(), i_in_tune.gain.value());
   auto v_out_average = AverageVoltageFromQueue(v_out_samples_queue, v_out_tune.offset.value(), v_out_tune.multiplier.value());
   auto i_out_average = AverageCurrentFromQueue(i_out_samples_queue, i_out_tune.shunt.value(), i_out_tune.offset.value(), i_out_tune.gain.value());
+//  uart_putc(uart1, '3');
 
   static float duty_integrated = 0.0F;  // Used for the I calculations of the PI loop
   float duty = 0.0F;
@@ -110,39 +114,51 @@ bool FeedbackLoop(repeating_timer_t* rt) {
   if (smps_parameters.enable.value() && smps_parameters.pi_loop_enable.value()) {  // SMPS enabled and PI loop enabled
     constexpr float duty_max = 0.90F;                                              // The max duty cycle the PI loop will every try to output
     constexpr float duty_min = 0.20F;                                              // The min duty cycle the PI loop will every try to output
-    constexpr float k_p = 0.1F;                                                    // KP constant for the PI compensation
-    constexpr float k_i = 2.0F;                                                   // KI constant for the PI compensation
+    constexpr float k_p = 0.01F;                                                    // KP constant for the PI compensation
+    constexpr float k_i = 0.2F;                                                   // KI constant for the PI compensation
 
     auto error = smps_parameters.v_out_set_point.value() - v_out_average;  // Calculate the error between desired voltage and output voltage
+//    uart_putc(uart1, '4');
 
     duty = k_p * error.to<float>() + duty_integrated;
     duty = std::clamp(duty, duty_min, duty_max);
+//    uart_putc(uart1, '5');
 
     duty_integrated += k_i * error.to<float>() * period.to<float>();
     duty_integrated = std::clamp(duty_integrated, duty_min, duty_max);
+//    uart_putc(uart1, '6');
 
-    static auto last_duty = duty;
-    if (std::abs(duty - last_duty) > 0.02F) {
-      FMTDebug("Setting PI duty cycle: {}%\n", duty);
-      last_duty = duty;
-    }
+//    static auto last_duty = duty;
+//    if (std::abs(duty - last_duty) > 0.05F) {
+//      FMTDebug("Setting PI duty cycle: {}%\n", duty);
+//      last_duty = duty;
+//    }
   } else {
     duty_integrated = smps_parameters.user_duty.value();
+//    uart_putc(uart1, '6');
   }
 
   if (smps_parameters.enable.value() && !smps_parameters.pi_loop_enable.value()) {
-    static auto last_duty = smps_parameters.user_duty.value();
     duty = smps_parameters.user_duty.value();
-    if (duty != last_duty) {
-      FMTDebug("Setting user duty cycle: {}%\n", duty);
-      last_duty = duty;
-    }
+//    uart_putc(uart1, '7');
+//    static auto last_duty = smps_parameters.user_duty.value();
+//    if (duty != last_duty) {
+//      FMTDebug("Setting user duty cycle: {}%\n", duty);
+//      last_duty = duty;
+//    }
   }
   if (!smps_parameters.enable.value() && !smps_parameters.pi_loop_enable.value()) {
     duty = 0;
+//    uart_putc(uart1, '8');
+  }
+
+  if (v_out_average > 32_V) {
+    duty = 0;
+//    uart_putc(uart1, '9');
   }
 
   pwm_manager.SMPSDuty(duty);
+//  uart_putc(uart1, 'A');
 
   SensorData sensor_data{
       .v_in = v_in_average,
@@ -151,14 +167,17 @@ bool FeedbackLoop(repeating_timer_t* rt) {
       .i_out = i_out_average,
   };
   queue_try_add(&sensor_data_queue, &sensor_data);
+//  uart_putc(uart1, 'B');
 
-  Core1MiscData misc_data{
-      .duty = duty,
-      .cpu_temperature = CPUTemperature(),
-  };
-  queue_try_add(&core_1_misc_data_queue, &misc_data);
+//  Core1MiscData misc_data{
+//      .duty = duty,
+//      .cpu_temperature = CPUTemperature(),
+//  };
+//  queue_try_add(&core_1_misc_data_queue, &misc_data);
 
   gpio_put(MONITOR_PIN, false);
+//  uart_putc(uart1, 'C');
+//  uart_putc(uart1, '\n');
   return true;  // Return true to repeat the timer
 }
 
@@ -198,16 +217,22 @@ void main1() {
   // This is the background task, while the feedback loop function is not running, the core fills the queues with ADC readings
   // The feedback loop function will average all the ADC values pushed into the queues when it runs
   while (true) {
+//    uart_putc(uart1, 'V');
     auto v_in_raw = ADCRaw(ADC_Channels::voltage_in);
     queue_try_add(&v_in_samples_queue, &v_in_raw);
+//    uart_putc(uart1, 'W');
 
     auto i_in_raw = ADCRaw(ADC_Channels::current_in);
     queue_try_add(&i_in_samples_queue, &i_in_raw);
+//    uart_putc(uart1, 'X');
 
     auto v_out_raw = ADCRaw(ADC_Channels::voltage_out);
     queue_try_add(&v_out_samples_queue, &v_out_raw);
+//    uart_putc(uart1, 'Y');
 
     auto i_out_raw = ADCRaw(ADC_Channels::current_out);
     queue_try_add(&i_out_samples_queue, &i_out_raw);
+//    uart_putc(uart1, 'Z');
+//    uart_putc(uart1, '\n');
   }
 }
