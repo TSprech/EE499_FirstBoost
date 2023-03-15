@@ -30,7 +30,7 @@ inline auto GetLine(std::span<char> buffer, char eol_indicator = '\n', uint32_t 
 
   while (true) {
     auto c = getchar_timeout_us(timeout_us);          // Nonblocking timeout based get char, if no serial data is available, pass
-    if (c == EOF || c == eol_indicator) [[unlikely]]  // The end of the line is either EOL or the user provided delimiter
+    if (c == PICO_ERROR_TIMEOUT || c == eol_indicator) [[unlikely]]  // The end of the line is either EOL or the user provided delimiter
       break;
     else [[likely]]  // If the end of the line hasn't been reached, place the data in the buffer
       buffer[end_index++] = c;

@@ -91,105 +91,107 @@ int main() {
   while (true) {
     auto in_str = GetLine(buf, '\r');
     if (!in_str.empty()) {
-      j = json::parse(in_str);
-      if (j.contains("SMPS")) {
-        //        if (j["SMPS"].contains("Duty")) pwm_manager.SMPSDuty(j["SMPS"]["Duty"]);
-        if (j["SMPS"].contains("DeadBand")) pwm_manager.DeadBand(j["SMPS"]["DeadBand"]);
-        //        if (j["SMPS"].contains("Frequency")) pwm_manager.SMPSFrequencyKHz(j["SMPS"]["Frequency"]);
-      }
+      if (json::accept(in_str)) {
+        j = json::parse(in_str, nullptr, false);
+        if (j.contains("SMPS")) {
+          //        if (j["SMPS"].contains("Duty")) pwm_manager.SMPSDuty(j["SMPS"]["Duty"]);
+          if (j["SMPS"].contains("DeadBand")) pwm_manager.DeadBand(j["SMPS"]["DeadBand"]);
+          //        if (j["SMPS"].contains("Frequency")) pwm_manager.SMPSFrequencyKHz(j["SMPS"]["Frequency"]);
+        }
 
-      units::voltage::volt_t v_set_point = 0_V;
-      if (FetchJSONValue(v_set_point, j, "SMPS", "SetPoint")) {
-        SMPSParameters parameters{.v_out_set_point = v_set_point};
-        queue_try_add(&smps_parameters_queue, &parameters);
-      }
+        units::voltage::volt_t v_set_point = 0_V;
+        if (FetchJSONValue(v_set_point, j, "SMPS", "SetPoint")) {
+          SMPSParameters parameters{.v_out_set_point = v_set_point};
+          queue_try_add(&smps_parameters_queue, &parameters);
+        }
 
-      float duty = 0;
-      if (FetchJSONValue(duty, j, "SMPS", "Duty")) {
-        SMPSParameters parameters{.user_duty = duty / 100.0F}; // Divide the duty by 100 to make it in the range of 0 - 1
-        queue_try_add(&smps_parameters_queue, &parameters);
-      }
+        float duty = 0;
+        if (FetchJSONValue(duty, j, "SMPS", "Duty")) {
+          SMPSParameters parameters{.user_duty = duty / 100.0F};  // Divide the duty by 100 to make it in the range of 0 - 1
+          queue_try_add(&smps_parameters_queue, &parameters);
+        }
 
-      bool enable = false;
-      if (FetchJSONValue(enable, j, "SMPS", "Enable")) {
-        SMPSParameters parameters{.enable = enable};
-        queue_try_add(&smps_parameters_queue, &parameters);
-      }
+        bool enable = false;
+        if (FetchJSONValue(enable, j, "SMPS", "Enable")) {
+          SMPSParameters parameters{.enable = enable};
+          queue_try_add(&smps_parameters_queue, &parameters);
+        }
 
-      bool pi_loop_enable = false;
-      if (FetchJSONValue(pi_loop_enable, j, "SMPS", "PIEnable")) {
-        SMPSParameters parameters{.pi_loop_enable = pi_loop_enable};
-        queue_try_add(&smps_parameters_queue, &parameters);
-      }
+        bool pi_loop_enable = false;
+        if (FetchJSONValue(pi_loop_enable, j, "SMPS", "PIEnable")) {
+          SMPSParameters parameters{.pi_loop_enable = pi_loop_enable};
+          queue_try_add(&smps_parameters_queue, &parameters);
+        }
 
-      units::voltage::volt_t v_in_offset = 0_V;
-      if (FetchJSONValue(v_in_offset, j, "Sensor", "Tune", "Vin", "Offset")) {
-        VTune v_tune{.offset = v_in_offset};
-        TuneValues tune{.v_in_tune = v_tune};
-        queue_try_add(&tune_values_queue, &tune);
-      }
+        units::voltage::volt_t v_in_offset = 0_V;
+        if (FetchJSONValue(v_in_offset, j, "Sensor", "Tune", "Vin", "Offset")) {
+          VTune v_tune{.offset = v_in_offset};
+          TuneValues tune{.v_in_tune = v_tune};
+          queue_try_add(&tune_values_queue, &tune);
+        }
 
-      float v_in_multiplier = 2.0F;
-      if (FetchJSONValue(v_in_multiplier, j, "Sensor", "Tune", "Vin", "Multiplier")) {
-        VTune v_tune{.multiplier = v_in_multiplier};
-        TuneValues tune{.v_in_tune = v_tune};
-        queue_try_add(&tune_values_queue, &tune);
-      }
+        float v_in_multiplier = 2.0F;
+        if (FetchJSONValue(v_in_multiplier, j, "Sensor", "Tune", "Vin", "Multiplier")) {
+          VTune v_tune{.multiplier = v_in_multiplier};
+          TuneValues tune{.v_in_tune = v_tune};
+          queue_try_add(&tune_values_queue, &tune);
+        }
 
-      units::voltage::volt_t v_out_offset = 0_V;
-      if (FetchJSONValue(v_out_offset, j, "Sensor", "Tune", "Vout", "Offset")) {
-        VTune v_tune{.offset = v_out_offset};
-        TuneValues tune{.v_out_tune = v_tune};
-        queue_try_add(&tune_values_queue, &tune);
-      }
-      float v_out_multiplier = 10.0F;
-      if (FetchJSONValue(v_out_multiplier, j, "Sensor", "Tune", "Vout", "Multiplier")) {
-        VTune v_tune{.multiplier = v_out_multiplier};
-        TuneValues tune{.v_out_tune = v_tune};
-        queue_try_add(&tune_values_queue, &tune);
-      }
+        units::voltage::volt_t v_out_offset = 0_V;
+        if (FetchJSONValue(v_out_offset, j, "Sensor", "Tune", "Vout", "Offset")) {
+          VTune v_tune{.offset = v_out_offset};
+          TuneValues tune{.v_out_tune = v_tune};
+          queue_try_add(&tune_values_queue, &tune);
+        }
+        float v_out_multiplier = 10.0F;
+        if (FetchJSONValue(v_out_multiplier, j, "Sensor", "Tune", "Vout", "Multiplier")) {
+          VTune v_tune{.multiplier = v_out_multiplier};
+          TuneValues tune{.v_out_tune = v_tune};
+          queue_try_add(&tune_values_queue, &tune);
+        }
 
-      units::voltage::volt_t i_in_offset = 1.65_V;
-      if (FetchJSONValue(i_in_offset, j, "Sensor", "Tune", "Iin", "Offset")) {
-        ITune i_tune{.offset = i_in_offset};
-        TuneValues tune{.i_in_tune = i_tune};
-        queue_try_add(&tune_values_queue, &tune);
-      }
-      float i_in_gain = 1.0F;
-      if (FetchJSONValue(i_in_gain, j, "Sensor", "Tune", "Iin", "Gain")) {
-        ITune i_tune{.gain = i_in_gain};
-        TuneValues tune{.i_in_tune = i_tune};
-        queue_try_add(&tune_values_queue, &tune);
-      }
+        units::voltage::volt_t i_in_offset = 1.65_V;
+        if (FetchJSONValue(i_in_offset, j, "Sensor", "Tune", "Iin", "Offset")) {
+          ITune i_tune{.offset = i_in_offset};
+          TuneValues tune{.i_in_tune = i_tune};
+          queue_try_add(&tune_values_queue, &tune);
+        }
+        float i_in_gain = 1.0F;
+        if (FetchJSONValue(i_in_gain, j, "Sensor", "Tune", "Iin", "Gain")) {
+          ITune i_tune{.gain = i_in_gain};
+          TuneValues tune{.i_in_tune = i_tune};
+          queue_try_add(&tune_values_queue, &tune);
+        }
 
-      units::voltage::volt_t i_out_offset = 1.65_V;
-      if (FetchJSONValue(i_out_offset, j, "Sensor", "Tune", "Iout", "Offset")) {
-        ITune i_tune{.offset = i_out_offset};
-        TuneValues tune{.i_out_tune = i_tune};
-        queue_try_add(&tune_values_queue, &tune);
-      }
-      float i_out_gain = 1.0F;
-      if (FetchJSONValue(i_out_gain, j, "Sensor", "Tune", "Iout", "Gain")) {
-        ITune i_tune{.gain = i_out_gain};
-        TuneValues tune{.i_out_tune = i_tune};
-        queue_try_add(&tune_values_queue, &tune);
-      }
+        units::voltage::volt_t i_out_offset = 1.65_V;
+        if (FetchJSONValue(i_out_offset, j, "Sensor", "Tune", "Iout", "Offset")) {
+          ITune i_tune{.offset = i_out_offset};
+          TuneValues tune{.i_out_tune = i_tune};
+          queue_try_add(&tune_values_queue, &tune);
+        }
+        float i_out_gain = 1.0F;
+        if (FetchJSONValue(i_out_gain, j, "Sensor", "Tune", "Iout", "Gain")) {
+          ITune i_tune{.gain = i_out_gain};
+          TuneValues tune{.i_out_tune = i_tune};
+          queue_try_add(&tune_values_queue, &tune);
+        }
 
-      units::impedance::ohm_t in_shunt = 1_Ohm;
-      if (FetchJSONValue(in_shunt, j, "Sensor", "Parameters", "In", "ShuntOhms")) {
-        ITune i_tune{.shunt = in_shunt};
-        TuneValues tune{.i_in_tune = i_tune};
-        queue_try_add(&tune_values_queue, &tune);
-      }
-      units::impedance::ohm_t out_shunt = 1_Ohm;
-      if (FetchJSONValue(out_shunt, j, "Sensor", "Parameters", "Out", "ShuntOhms")) {
-        ITune i_tune{.shunt = out_shunt};
-        TuneValues tune{.i_out_tune = i_tune};
-        queue_try_add(&tune_values_queue, &tune);
-      }
+        units::impedance::ohm_t in_shunt = 1_Ohm;
+        if (FetchJSONValue(in_shunt, j, "Sensor", "Parameters", "In", "ShuntOhms")) {
+          ITune i_tune{.shunt = in_shunt};
+          TuneValues tune{.i_in_tune = i_tune};
+          queue_try_add(&tune_values_queue, &tune);
+        }
+        units::impedance::ohm_t out_shunt = 1_Ohm;
+        if (FetchJSONValue(out_shunt, j, "Sensor", "Parameters", "Out", "ShuntOhms")) {
+          ITune i_tune{.shunt = out_shunt};
+          TuneValues tune{.i_out_tune = i_tune};
+          queue_try_add(&tune_values_queue, &tune);
+        }
 
-      if (j.contains("Control")) {
-        CheckKeyThenCall(j["Control"], "LED", BuiltInLED);
+        if (j.contains("Control")) {
+          CheckKeyThenCall(j["Control"], "LED", BuiltInLED);
+        }
       }
     }
     j.clear();
@@ -200,14 +202,14 @@ int main() {
       j["SMPS"]["In"]["Amps"] = sensor_data.i_in.to<float>();
       j["SMPS"]["Out"]["Volts"] = sensor_data.v_out.to<float>();
       j["SMPS"]["Out"]["Amps"] = sensor_data.i_out.to<float>();
-      std::string buf_str{};
-      fmt::format_to(std::back_inserter(buf_str), "v_in_samples_queue: {}\n", queue_get_level(&v_in_samples_queue));
-      fmt::format_to(std::back_inserter(buf_str), "i_in_samples_queue: {}\n", queue_get_level(&i_in_samples_queue));
-      fmt::format_to(std::back_inserter(buf_str), "v_out_samples_queue: {}\n", queue_get_level(&v_out_samples_queue));
-      fmt::format_to(std::back_inserter(buf_str), "i_out_samples_queue: {}\n", queue_get_level(&i_out_samples_queue));
-      fmt::format_to(std::back_inserter(buf_str), "tune_values_queue: {}\n", queue_get_level(&tune_values_queue));
-      fmt::format_to(std::back_inserter(buf_str), "smps_parameters_queue: {}\n", queue_get_level(&smps_parameters_queue));
-      fmt::format_to(std::back_inserter(buf_str), "sensor_data_queue: {}\n\0", queue_get_level(&sensor_data_queue));
+//      std::string buf_str{};
+//      fmt::format_to(std::back_inserter(buf_str), "v_in_samples_queue: {}\n", queue_get_level(&v_in_samples_queue));
+//      fmt::format_to(std::back_inserter(buf_str), "i_in_samples_queue: {}\n", queue_get_level(&i_in_samples_queue));
+//      fmt::format_to(std::back_inserter(buf_str), "v_out_samples_queue: {}\n", queue_get_level(&v_out_samples_queue));
+//      fmt::format_to(std::back_inserter(buf_str), "i_out_samples_queue: {}\n", queue_get_level(&i_out_samples_queue));
+//      fmt::format_to(std::back_inserter(buf_str), "tune_values_queue: {}\n", queue_get_level(&tune_values_queue));
+//      fmt::format_to(std::back_inserter(buf_str), "smps_parameters_queue: {}\n", queue_get_level(&smps_parameters_queue));
+//      fmt::format_to(std::back_inserter(buf_str), "sensor_data_queue: {}\n\0", queue_get_level(&sensor_data_queue));
 
 //      j["System"]["Queues"]["VIn"]["Level"] = queue_get_level(&v_in_samples_queue);
 ////      j["System"]["Queues"]["VIn"]["MaxSize"] = (&v_in_samples_queue);
@@ -224,7 +226,7 @@ int main() {
 //      j["System"]["Queues"]["SensorData"]["Level"] = queue_get_level(&sensor_data_queue);
 ////      j["System"]["Queues"]["SensorData"]["MaxSize"] = (&sensor_data_queue);
 
-      j["System"]["Message"] = buf_str;
+//      j["System"]["Message"] = buf_str;
     }
 
 //    Core1MiscData misc_data{};
