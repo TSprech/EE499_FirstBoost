@@ -78,6 +78,10 @@ int main() {
   gpio_init(LED_PIN);
   gpio_set_dir(LED_PIN, GPIO_OUT);
 
+  gpio_init(6);
+  gpio_set_dir(6, GPIO_OUT);
+  gpio_put(6, true);
+
   queue_init(&tune_values_queue, sizeof(TuneValues), 10);
   queue_init(&smps_parameters_queue, sizeof(SMPSParameters), 10);
   queue_init(&sensor_data_queue, sizeof(SensorData), 2);
