@@ -168,7 +168,7 @@ bool FeedbackLoop(repeating_timer_t* rt) {
 //    uart_putc(uart1, '8');
   }
 
-  if (v_out_average > 32_V) {
+  if (v_out_average > 32_V || (AverageVoltageFromQueue(v_out_samples_queue) > 3.2_V)) {
     duty = 0;
 //    uart_putc(uart1, '9');
   }
