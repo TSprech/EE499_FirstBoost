@@ -123,14 +123,14 @@ class SystemDetails(ctk.CTkFrame):
         parameter_frame = ctk.CTkFrame(self)
         parameter_frame.grid(row=1, column=0, pady=(0, 5), sticky='nw')
         self.cpu_temp_label = ctk.CTkLabel(parameter_frame, text='CPU Temp: ', font=hfonts.header_3_font)
-        self.cpu_temp_label.grid(row=0, column=0, sticky="nw")
+        self.cpu_temp_label.grid(row=0, column=0, padx=(10, 10), pady=(5, 0), sticky="nw")
         self.cpu_temp_value = ctk.CTkLabel(parameter_frame, text='XX°C', font=hfonts.header_3_font)
-        self.cpu_temp_value.grid(row=0, column=1, sticky="nw")
+        self.cpu_temp_value.grid(row=0, column=1, padx=(10, 10), pady=(5, 0), sticky="nw")
 
         self.led_label = ctk.CTkLabel(parameter_frame, text='LED: ', font=hfonts.header_3_font)
-        self.led_label.grid(row=1, column=0, sticky="nw")
+        self.led_label.grid(row=1, column=0, padx=(10, 10), pady=(0, 5), sticky="nw")
         self.led_switch = ctk.CTkSwitch(parameter_frame, onvalue=True, text='', offvalue=False, command=lambda: bus.emit('gui:led_switch_change', self))
-        self.led_switch.grid(row=1, column=1, sticky="nw")
+        self.led_switch.grid(row=1, column=1, padx=(10, 10), pady=(0, 5), sticky="nw")
 
 
 class SMPSParameters(ctk.CTkFrame):
@@ -492,8 +492,8 @@ def updated_from_json(json_data: dict):
             app.message_box.insert(ctk.END, json_data['System']['Message'])
             app.message_box.see(ctk.END)
         #
-        # app.set_m(float(app.get_v_out()) / float(app.get_v_in()))
-        # app.set_e(float(app.get_p_out()) / float(app.get_p_in()) * 100)
+        app.set_m(float(app.get_v_out()) / float(app.get_v_in()))
+        app.set_e(float(app.get_p_out()) / float(app.get_p_in()) * 100)
 
         # print(f"A Level: {json_data['SMPS']['ALevel']}")
         # print(f"B Level: {json_data['SMPS']['BLevel']}")

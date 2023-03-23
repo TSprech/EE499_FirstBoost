@@ -20,6 +20,8 @@
 #include "units.h"
 using namespace units::literals;
 
+#define UNOBOARD 1
+
 #include "FMT/FMTToUART.hpp"
 
 #include "hardware/clocks.h"
@@ -143,7 +145,11 @@ struct PWMManager {
   uint16_t deadband_ = 24;
 };
 
+#ifdef UNOBOARD
+inline PWMManager pwm_manager(8, 9);
+#else
 inline PWMManager pwm_manager(0, 1);
+#endif
 
 inline queue_t v_in_samples_queue;
 inline queue_t i_in_samples_queue;
