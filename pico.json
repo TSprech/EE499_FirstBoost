@@ -1,9 +1,41 @@
 {
   "SMPS": {
     "EStop": false,
+    "Enable": true,
+    "PIEnable": true,
+    "SetPoint": 30,
     "Duty": 0,
     "DeadBand": 0,
+    "FrequencyKHz": 100,
     "Protection": false
+  },
+  "Sensor": {
+    "Tune": {
+      "Vin": {
+        "Offset": 1.65,
+        "Multiplier": 5.8
+      },
+      "Vout": {
+        "Offset": 1.65,
+        "Multiplier": 5.8
+      },
+      "Iin": {
+        "Offset": 1.65,
+        "Gain": 5.8
+      },
+      "Iout": {
+        "Offset": 1.65,
+        "Gain": 5.8
+      }
+    },
+    "Parameters": {
+      "In" : {
+        "ShuntOhms": 1
+      },
+      "Out" : {
+        "ShuntOhms": 1
+      }
+    }
   },
   "Control": {
     "LED": false

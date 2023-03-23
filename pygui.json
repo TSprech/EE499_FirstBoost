@@ -1,0 +1,19 @@
+{
+  "SMPS": {
+    "In": {
+      "Volts": 1.00,
+      "Amps": 2.00
+    },
+    "Out": {
+      "Volts": 3.00,
+      "Amps": 4.00
+    },
+    "PWM": {
+      "FrequencyKHz": 100
+    }
+  },
+  "System": {
+    "Message": "Insert text here",
+    "TempC": 5.00
+  }
+}
